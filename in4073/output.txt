@@ -1,0 +1,51 @@
+rm -rf _build
+mkdir _build
+Compiling file: system_nrf51.c
+Compiling file: nrf_delay.c
+Compiling file: in4073.c
+Compiling file: control.c
+Compiling file: gpio.c
+Compiling file: timers.c
+Compiling file: uart.c
+Compiling file: queue.c
+Compiling file: twi.c
+Compiling file: adc.c
+Compiling file: baro.c
+Compiling file: ble.c
+Compiling file: spi_flash.c
+Compiling file: inv_mpu.c
+Compiling file: inv_mpu_dmp_motion_driver.c
+Compiling file: ml.c
+Compiling file: mpu_wrapper.c
+Compiling file: app_error.c
+Compiling file: app_timer.c
+Compiling file: nrf_assert.c
+Compiling file: nrf_drv_common.c
+Compiling file: pstorage.c
+Compiling file: ble_advdata.c
+Compiling file: ble_advertising.c
+Compiling file: ble_conn_params.c
+Compiling file: ble_nus.c
+Compiling file: ble_srv_common.c
+Compiling file: softdevice_handler.c
+Compiling file: gcc_startup_nrf51.s
+Linking target: in4073.out
+make[1]: Entering directory '/home/jeffrey/Desktop/software_package/in4073'
+Preparing: in4073.bin
+Preparing: in4073.hex
+
+   text	   data	    bss	    dec	    hex	filename
+  35692	    168	    752	  36612	   8f04	_build/in4073.out
+
+make[1]: Leaving directory '/home/jeffrey/Desktop/software_package/in4073'
+cd pc_terminal/; make
+make[1]: Entering directory '/home/jeffrey/Desktop/software_package/in4073/pc_terminal'
+gcc -g -Wall -lm pc_terminal.c -o ./pc-terminal
+make[1]: Leaving directory '/home/jeffrey/Desktop/software_package/in4073/pc_terminal'
+dfu_serial/./serial_dfu.py  _build/in4073.bin
+35860
+Timed out waiting for acknowledgement from device.
+No data received on serial port. Not able to proceed.
+Timed out waiting for acknowledgement from device.
+No data received on serial port. Not able to proceed.
+Makefile:231: recipe for target 'upload-run' failed
