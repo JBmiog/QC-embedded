@@ -12,7 +12,13 @@
 #include <unistd.h>
 #include <string.h>
 #include <inttypes.h>
+#include <time.h>
+#include "../protocol/protocol.h"
+#include "globals.h"
+#include "keyboard.h"
 
+
+#define NANO_SECOND_MULTIPLIER 1000000
 /*------------------------------------------------------------
  * console I/O
  *------------------------------------------------------------
@@ -90,7 +96,7 @@ void rs232_open(void)
   	int 		result;  
   	struct termios	tty;
 
-       	fd_RS232 = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);  // Hardcode your serial port here, or request it as an argument at runtime
+     	fd_RS232 = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);  // Hardcode your serial port here, or request it as an argument at runtime
 
 	assert(fd_RS232>=0);
 
@@ -151,18 +157,15 @@ int	rs232_getchar_nb()
 }
 
 
-int 	rs232_getchar()
-{
+int rs232_getchar() {
 	int 	c;
-
-	while ((c = rs232_getchar_nb()) == -1) 
+	while ((c = rs232_getchar_nb()) == -1)  
 		;
 	return c;
 }
 
 
-int 	rs232_putchar(char c)
-{ 
+int rs232_putchar(char c) { 
 	int result;
 
 	do {
@@ -173,9 +176,96 @@ int 	rs232_putchar(char c)
 	return result;
 }
 
+/* handles the input of the keyboard, Jeffrey Miog */
+void kb_input_handler(char pressed_key){
+	switch(pressed_key){
+		case ESC:   mode = PANIC_MODE; break;
+		case ZERO:	mode = SAFE_MODE;
+					term_puts("changed mode to safe mode\n"); 
+					break;
+		case ONE: 	mode = PANIC_MODE; break;
+		case TWO:	mode = MANUAL_MODE; break;
+		case FOUR:	mode = YAW_CONTROLLED_MODE; break;
+		case FIVE:	mode = FULL_CONTROL_MODE; break;
+		case SIX:	mode = RAW_MODE; break;
+		case SEVEN:	mode = HEIGHT_CONTROL_MODE; break;
+		case EIGHT:	mode = WIRELESS_MODE; break;
+		case 'a':	lift_offset += UP;  break;
+		case 'z':	lift_offset += DOWN;  break;
+		case 'q': 	yaw_offset += DOWN;  break;
+		case 'w':	yaw_offset += UP; break;
+		
+		//control loop values adjusting 
+		case 'u': 	yaw_offset_p = UP; 	break;
+		case 'j': 	yaw_offset_p = DOWN; break;
+		case 'i': 	roll_pitch_offset_p1 = UP; break;
+		case 'k': 	roll_pitch_offset_p1 = DOWN;  break;
+		case 'o':	roll_pitch_offset_p2 = UP; break;
+		case 'l': 	roll_pitch_offset_p2 = DOWN; break;
+		//arrow up
+		case 'A': pitch_offset += DOWN; break;
+		//arrow down
+		case 'B': pitch_offset += UP; break;
+		//arrow right					
+		case 'C': roll_offset += DOWN; break;
+		//arrow left
+		case 'D': roll_offset += UP; break;
+		
+		//own implementation
+		case 't':	kb_pitch = UP;
+		case 'g':	kb_pitch = DOWN;
+		case 'f':	kb_roll = UP;
+		case 'h':	kb_roll = DOWN;
+		case 'v': 	kb_lift = UP;
+		case 'b':	kb_lift = DOWN;
+		default: 
+				return;
+				break;
+		}	
+
+		
+}
+
+/* jmi */
+void print_static_offsets() {
+	printf("mode = %d\t y_offset = %d\t p_offset = %d\t, r_offset = %d\t, l_offset = %d\t p = %d\t P1 = %d\t, P2 = %d\n",mode, yaw_offset, pitch_offset, roll_offset, lift_offset, yaw_offset_p, roll_pitch_offset_p1, roll_pitch_offset_p2);
+}
+
+
+char get_checksum(){
+	return (0xFF >> 1);
+}
+
+/* jmi */
+void create_packet(){
+	mypacket.header = HEADER_VALUE;
+	mypacket.mode = mode;
+	//mypacket.p_adjust = 
+	/*here i need the joystick...?*/		
+	mypacket.lift = (lift_offset + js_lift + kb_lift) >>1;
+	mypacket.pitch = (pitch_offset + js_pitch + kb_lift) >>1;
+	mypacket.roll = (roll_offset + js_roll + kb_roll) >> 1;
+	mypacket.yaw = (yaw_offset + js_yaw + kb_yaw) >>1;
+	mypacket.checksum = get_checksum(mypacket);	
+}
+
+
+/* jmi */
+void tx_packet(){
+	//term_puts("tx packet to FCB\n");
+	rs232_putchar(mypacket.header);
+	rs232_putchar(mypacket.mode);
+	rs232_putchar(mypacket.p_adjust);	
+	rs232_putchar(mypacket.lift);
+	rs232_putchar(mypacket.pitch);
+	rs232_putchar(mypacket.roll);
+	rs232_putchar(mypacket.yaw);
+	rs232_putchar(mypacket.checksum);
+}
 
 /*----------------------------------------------------------------
  * main -- execute terminal
+ * edited by jmi
  *----------------------------------------------------------------
  */
 int main(int argc, char **argv)
@@ -187,23 +277,54 @@ int main(int argc, char **argv)
 	term_initio();
 	rs232_open();
 
-	term_puts("Type ^C to exit\n");
-
-	/* discard any incoming text
-	 */
-	while ((c = rs232_getchar_nb()) != -1)
-		fputc(c,stderr);
-	
-	/* send & receive
-	 */
-	for (;;) 
-	{
-		if ((c = term_getchar_nb()) != -1) 
-			rs232_putchar(c);
+	/* display keyboard mapping */
+	term_puts("keyboard mapping:\n");
+	term_puts("a:\t	lift_offset up\n 'z':\t	lift_offset down\n");
+ 	term_puts("q:\t	yaw up\n 'w':\t	yaw down\n");
+	term_puts("up:\t	pitch_offset up\n 'down':\t	ptich_offset down\n");
+	term_puts("right:\t	roll_offset up\n 'right':	roll_offset down \n");
+	term_puts("P CONTROLLERS TO BE ADDED \n");
 		
-		if ((c = rs232_getchar_nb()) != -1) 
-			term_putchar(c);
+	term_puts("\nType ^C to exit\n");
 
+
+	/* needed for sleeping mode */
+	struct timespec tim, tim2;
+	const long interval_ms = 300 * NANO_SECOND_MULTIPLIER;
+	tim.tv_sec  = 0;
+	tim.tv_nsec = interval_ms;
+	
+	while(1){
+		/*delay +/- 100 ms*/
+		if(nanosleep(&tim , &tim2) < 0 )  {
+			printf("Nano sleep system call failed \n");
+		}
+		
+		create_packet();
+		tx_packet();		
+
+		while ((c = term_getchar_nb()) != -1) {
+			kb_input_handler(c);
+			term_putchar('>');
+			term_putchar(c);
+			term_putchar('\n');
+			print_static_offsets();
+			//rs232_putchar(pressed_key);
+		}
+
+		/*read until return is given*/ 
+		if((c = rs232_getchar_nb()) != -1) {
+			term_putchar('<');
+			term_putchar(c);
+			while ((c = rs232_getchar_nb()) != '\n'){ 				
+				term_putchar(c);
+			}
+			term_putchar('\n');
+			/*flush the rest of the input buffer*/	
+			while ((c = rs232_getchar_nb()) != -1){ 				
+				term_putchar(c);
+			}		
+			}
 	}
 
 	term_exitio();

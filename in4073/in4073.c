@@ -14,13 +14,31 @@
  */
 
 #include "in4073.h"
-
+#include "protocol/protocol.h"
+packet pc_packet;
 /*------------------------------------------------------------------
- * process_key -- process command keys
+ * process incomming packets
+ * edited by jmi
  *------------------------------------------------------------------
  */
-void process_key(uint8_t c) 
+void process_input(char c) 
 {
+	if(c == HEADER_VALUE) {
+		//while(rx_queue.count < 8){} 
+		pc_packet.header = c;
+		pc_packet.mode = dequeue(&rx_queue);		
+		pc_packet.p_adjust = dequeue(&rx_queue);
+		pc_packet.lift = dequeue(&rx_queue);
+		pc_packet.pitch = dequeue(&rx_queue);
+		pc_packet.roll = dequeue(&rx_queue);
+		pc_packet.yaw = dequeue(&rx_queue);
+		pc_packet.checksum = dequeue(&rx_queue);
+		printf("h:%x, m:%x,..,c:%x\n",pc_packet.header,pc_packet.mode,pc_packet.checksum);
+	}			
+
+
+/*
+
 	switch (c) 
 	{
 		case 'q':
@@ -57,10 +75,12 @@ void process_key(uint8_t c)
 		default:
 			nrf_gpio_pin_toggle(RED);
 	}
+	*/
 }
 
 /*------------------------------------------------------------------
  * main -- do the test
+ * edited by jmi
  *------------------------------------------------------------------
  */
 int main(void)
@@ -80,7 +100,7 @@ int main(void)
 
 	while (!demo_done)
 	{	
-		if (rx_queue.count) process_key( dequeue(&rx_queue) ); 
+		if (rx_queue.count) process_input( dequeue(&rx_queue) ); 
 
 		if (check_timer_flag()) 
 		{
@@ -88,12 +108,6 @@ int main(void)
 
 			adc_request_sample();
 			read_baro();
-
-			printf("%10ld | ", get_time_us());
-			printf("%3d %3d %3d %3d | ",ae[0],ae[1],ae[2],ae[3]);
-			printf("%6d %6d %6d | ", phi, theta, psi);
-			printf("%6d %6d %6d | ", sp, sq, sr);
-			printf("%4d | %4ld | %6ld \n", bat_volt, temperature, pressure);
 
 			clear_timer_flag();
 		}
