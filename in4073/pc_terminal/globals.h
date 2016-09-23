@@ -24,6 +24,11 @@ char roll_pitch_offset_p2;
 
 char mode = 0;
 
+int	axis[6];
+int	button[12];
+packet js_p_buffer[6];
+int counter = 0;
+
 packet mypacket;
 
 #endif
