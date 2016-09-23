@@ -12,170 +12,77 @@
  *  June 2016
  *------------------------------------------------------------------
  */
-
-
-/*
-
-	switch (c) 
-	{
-		case 'q':
-			ae[0] += 10;
-			break;
-		case 'a':
-			ae[0] -= 10;
-			if (ae[0] < 0) ae[0] = 0;
-			break;
-		case 'w':
-			ae[1] += 10;
-			break;
-		case 's':
-			ae[1] -= 10;
-			if (ae[1] < 0) ae[1] = 0;
-			break;
-		case 'e':
-			ae[2] += 10;
-			break;
-		case 'd':
-			ae[2] -= 10;
-			if (ae[2] < 0) ae[2] = 0;
-			break;
-		case 'r':
-			ae[3] += 10;
-			break;
-		case 'f':
-			ae[3] -= 10;
-			if (ae[3] < 0) ae[3] = 0;
-			break;
-		case 27:
-			demo_done = true;
-			break;
-		default:
-			nrf_gpio_pin_toggle(RED);
-	}
-	*/
-
-
 #include "in4073.h"
 #include "protocol/protocol.h"
 #include "states.h"
+#include "math.h"
+
+
+#define MILLION 1000000
+#define BAT_THRESHOLD  1050
 packet pc_packet;
+
 /*------------------------------------------------------------------
  * process incomming packets
  * edited by jmi
  *------------------------------------------------------------------
  */
 
-void actuate(char lift1, char pitch1, char roll1, char yaw1)
+void actuate(char lift, char pitch, char roll, char yaw)
 {
-	char temp, lift, pitch, roll, yaw;
+	float Z,M,L,N;
+	float t1,t2,t3,t4;
 
-	lift=lift1;
-	pitch=pitch1;
-	roll=roll1;
-	yaw=yaw1;
-	
+
+
 	//first restore the sign bit to the msb!!!
-	temp=lift & 0x40;
-	if(temp==0x40)
-	{
-		lift=lift&0x3f;
-		lift=lift|0x80;
-	}
-	
-	temp=pitch & 0x40;
-	if(temp==0x40)
-	{
-		pitch=pitch&0x3f;
-		pitch=pitch|0x80;
-	}
-
-	temp=roll & 0x40;
-	if(temp==0x40)
-	{
-		roll=roll&0x3f;
-		roll=roll|0x80;
-	}
-
-	temp=yaw & 0x40;
-	if(temp==0x40)
-	{
-		yaw=yaw&0x3f;
-		yaw=yaw|0x80;
-	}
-	
+	lift=lift<<1;
+	pitch=pitch<<1;
+	roll=roll<<1;
+	yaw=yaw<<1;
 
 	//actuate motors depending on the values received
-	if((lift&0x80)!=0x80)
-	{
-		if(old_lift!=lift)
-		{
-			printf("L\n");
-			old_lift=lift;
-		}
-	}
+	L=(roll/127)*(MILLION);
+	M=(pitch/127)*(MILLION);
+	N=(yaw/127)*(2*MILLION);
+	Z=(-1)*(lift/127)*(4*MILLION);
+
+	t1=(2*M-N-Z)/4;
+	t2=(2*L+N-Z)/4 - L;
+	t3=(2*M-N-Z)/4 - M;
+	t4=(2*L+N-Z)/4;
 	
-	if((lift&0x80)==0x80)
+	if(t1<0)
 	{
-		if(old_lift!=lift)
-		{
-			printf("l\n");
-			old_lift=lift;
-		}		
-	}	
-	
-	if((pitch&0x80)!=0x80)
-	{
-		if(old_pitch!=pitch)
-		{
-			printf("P\n");
-			old_pitch=pitch;			
-		}	
-	}
-	
-	if((pitch&0x80)==0x80)
-	{
-		if(old_pitch!=pitch)
-		{
-			printf("p\n");
-			old_pitch=pitch;			
-		}
+		t1=10000;
 	}
 
-	if((roll&0x80)!=0x80)
+	if(t2<0)
 	{
-		if(old_roll!=roll)
-		{
-			printf("R\n");
-			old_roll=roll;			
-		}
-	}
-	
-	if((roll&0x80)==0x80)
-	{
-		if(old_roll!=roll)
-		{
-			printf("r\n");
-			old_roll=roll;			
-		}		
+		t2=10000;
 	}
 
-	if((yaw&0x80)!=0x80)
+	if(t3<0)
 	{
-		if(old_yaw!=yaw)
-		{
-			printf("Y\n");
-			old_yaw=yaw;			
-		}
+		t3=10000;
 	}
+
+	if(t4<0)
+	{
+		t4=10000;
+	}
+
+	ae[0]=(int16_t)sqrt(t1);
+	ae[1]=(int16_t)sqrt(t2);
+	ae[2]=(int16_t)sqrt(t3);
+	ae[3]=(int16_t)sqrt(t4);
 	
-	if((yaw&0x80)==0x80)
-	{
-		if(old_yaw!=yaw)
-		{
-			printf("y\n");
-			old_yaw=yaw;			
-		}		
-	}
+	//ae[0]=200;
+	//ae[1]=200;
+	//ae[2]=0;
+	//ae[3]=0;
+	run_filters_and_control();
+	
 }
 
 
@@ -213,6 +120,8 @@ void process_input()
 		pc_packet.roll = tp.roll;
 		pc_packet.yaw = tp.yaw;
 		pc_packet.checksum = tp.checksum;
+		//printf("%d - %d - %d - %d\n",pc_packet.roll,pc_packet.pitch,pc_packet.yaw,pc_packet.lift);
+		//nrf_delay_ms(50);
 	}
 
 	//printf("head:%x, mod:%x,padjust:%x,lift:%x,pitch:%x,roll:%x,yaw:%x,check:%x\n" ,pc_packet.header,pc_packet.mode,pc_packet.p_adjust,pc_packet.lift,pc_packet.pitch,pc_packet.roll,pc_packet.yaw,pc_packet.checksum);
@@ -235,6 +144,7 @@ void panic_mode()
 	ae[1]=ae[1]/2;
 	ae[2]=ae[2]/2;
 	ae[3]=ae[3]/2;
+	run_filters_and_control();
 	nrf_delay_ms(1000);
 	
 	statefunc=safe_mode;
@@ -244,14 +154,13 @@ void panic_mode()
 void manual_mode()
 {
 	cur_mode=MANUAL_MODE;
-	//actuate(cur_lift,cur_pitch,cur_roll,cur_yaw);
+	actuate(cur_lift,cur_pitch,cur_roll,cur_yaw);
 	process_input();
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,0);
 	switch (pc_packet.mode)
 	{
 		case PANIC_MODE:
-			//printf("B\n");
 			cur_lift=0;
 			cur_pitch=0;
 			cur_roll=0;
@@ -282,13 +191,13 @@ void safe_mode()
 	ae[1]=0;
 	ae[2]=0;
 	ae[3]=0;
+	run_filters_and_control();
 	process_input();
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,1);
 	switch (pc_packet.mode)
 	{
 		case MANUAL_MODE:
-			printf("A\n");
 			cur_lift=pc_packet.lift;
 			cur_pitch=pc_packet.pitch;
 			cur_roll=pc_packet.roll;
@@ -341,6 +250,17 @@ int main(void)
 	while (!demo_done)
 	{	
 		(*statefunc)();	
+		if (check_timer_flag()) 
+		{
+			adc_request_sample();
+			clear_timer_flag();
+			//printf("%4d\n", bat_volt);
+			
+			/*if (bat_volt < BAT_THRESHOLD) {
+				statefunc=panic_mode;
+			}*/	
+		}
+		
 	}	
 	
 	printf("\n\t Goodbye \n\n");

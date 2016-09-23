@@ -232,6 +232,11 @@ void print_static_offsets() {
 	printf("mode = %d\t y_offset = %d\t p_offset = %d\t, r_offset = %d\t, l_offset = %d\t p = %d\t P1 = %d\t, P2 = %d\n",mode, yaw_offset, pitch_offset, roll_offset, lift_offset, yaw_offset_p, roll_pitch_offset_p1, roll_pitch_offset_p2);
 }
 
+void print_packet(){
+	printf("lift=%d, pitch=%d, roll=%d, yaw=%d \n",mypacket.lift,mypacket.pitch,mypacket.roll,mypacket.yaw);
+
+}
+
 /*jmi*/
 char get_checksum() {	
 	char checksum = (mypacket.header^mypacket.mode^mypacket.p_adjust^mypacket.lift^mypacket.pitch^mypacket.roll^mypacket.yaw) >> 1;
@@ -252,6 +257,7 @@ void create_packet(){
 	mypacket.roll = ((roll_offset + js_roll + kb_roll) >> 1) & 0x7F;
 	mypacket.yaw = ((yaw_offset + js_yaw + kb_yaw) >>1) & 0x7F;
 	mypacket.checksum = get_checksum(mypacket) & 0x7F;	
+	print_packet();
 }
 
 
@@ -326,6 +332,10 @@ int main(int argc, char **argv)
 				term_putchar(c);
 			}
 			term_putchar('\n');
+				
+			while ((c = rs232_getchar_nb()) != -1){ 				
+				term_putchar(c);
+			}
 
 		}
 	}
