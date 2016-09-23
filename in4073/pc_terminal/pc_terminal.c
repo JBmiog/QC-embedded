@@ -232,22 +232,26 @@ void print_static_offsets() {
 	printf("mode = %d\t y_offset = %d\t p_offset = %d\t, r_offset = %d\t, l_offset = %d\t p = %d\t P1 = %d\t, P2 = %d\n",mode, yaw_offset, pitch_offset, roll_offset, lift_offset, yaw_offset_p, roll_pitch_offset_p1, roll_pitch_offset_p2);
 }
 
-
-char get_checksum(){
-	return (0xFF >> 1);
+/*jmi*/
+char get_checksum() {	
+	char checksum = ( mypacket.header^mypacket.mode^mypacket.p_adjust^mypacket.lift^mypacket.pitch^mypacket.roll^mypacket.yaw) >> 1;
+	return checksum;
 }
 
-/* jmi */
+/* jmi 
+the &0x7F is for savety only, so we know MSB is only set in the
+header
+*/
 void create_packet(){
 	mypacket.header = HEADER_VALUE;
 	mypacket.mode = mode;
 	//mypacket.p_adjust = 
 	/*here i need the joystick...?*/		
-	mypacket.lift = (lift_offset + js_lift + kb_lift) >>1;
-	mypacket.pitch = (pitch_offset + js_pitch + kb_lift) >>1;
-	mypacket.roll = (roll_offset + js_roll + kb_roll) >> 1;
-	mypacket.yaw = (yaw_offset + js_yaw + kb_yaw) >>1;
-	mypacket.checksum = get_checksum(mypacket);	
+	mypacket.lift = ((lift_offset + js_lift + kb_lift) >>1) & 0x7F;
+	mypacket.pitch = ((pitch_offset + js_pitch + kb_lift) >>1) & 0x7F;
+	mypacket.roll = ((roll_offset + js_roll + kb_roll) >> 1) & 0x7F;
+	mypacket.yaw = ((yaw_offset + js_yaw + kb_yaw) >>1) & 0x7F;
+	mypacket.checksum = get_checksum(mypacket) & 0x7F;	
 }
 
 
@@ -322,10 +326,7 @@ int main(int argc, char **argv)
 				term_putchar(c);
 			}
 			term_putchar('\n');
-			/*flush the rest of the input buffer 	
-			while ((c = rs232_getchar_nb()) != -1){ 				
-				term_putchar(c);
-			}		*/
+
 		}
 	}
 
