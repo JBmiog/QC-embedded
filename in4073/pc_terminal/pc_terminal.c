@@ -301,7 +301,6 @@ int main(int argc, char **argv)
 			printf("Nano sleep system call failed \n");
 		}
 		
-				
 		printf("creating apcket\n");
 		create_packet();
 		tx_packet();		
@@ -323,10 +322,10 @@ int main(int argc, char **argv)
 				term_putchar(c);
 			}
 			term_putchar('\n');
-			/*flush the rest of the input buffer */	
+			/*flush the rest of the input buffer 	
 			while ((c = rs232_getchar_nb()) != -1){ 				
 				term_putchar(c);
-			}		
+			}		*/
 		}
 	}
 
