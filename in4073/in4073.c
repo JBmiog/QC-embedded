@@ -64,6 +64,121 @@ packet pc_packet;
  * edited by jmi
  *------------------------------------------------------------------
  */
+
+void actuate(char lift1, char pitch1, char roll1, char yaw1)
+{
+	char temp, lift, pitch, roll, yaw;
+
+	lift=lift1;
+	pitch=pitch1;
+	roll=roll1;
+	yaw=yaw1;
+	
+	//first restore the sign bit to the msb!!!
+	temp=lift & 0x40;
+	if(temp==0x40)
+	{
+		lift=lift&0x3f;
+		lift=lift|0x80;
+	}
+	
+	temp=pitch & 0x40;
+	if(temp==0x40)
+	{
+		pitch=pitch&0x3f;
+		pitch=pitch|0x80;
+	}
+
+	temp=roll & 0x40;
+	if(temp==0x40)
+	{
+		roll=roll&0x3f;
+		roll=roll|0x80;
+	}
+
+	temp=yaw & 0x40;
+	if(temp==0x40)
+	{
+		yaw=yaw&0x3f;
+		yaw=yaw|0x80;
+	}
+	
+
+	//actuate motors depending on the values received
+	if((lift&0x80)!=0x80)
+	{
+		if(old_lift!=lift)
+		{
+			printf("L\n");
+			old_lift=lift;
+		}
+	}
+	
+	if((lift&0x80)==0x80)
+	{
+		if(old_lift!=lift)
+		{
+			printf("l\n");
+			old_lift=lift;
+		}		
+	}	
+	
+	if((pitch&0x80)!=0x80)
+	{
+		if(old_pitch!=pitch)
+		{
+			printf("P\n");
+			old_pitch=pitch;			
+		}	
+	}
+	
+	if((pitch&0x80)==0x80)
+	{
+		if(old_pitch!=pitch)
+		{
+			printf("p\n");
+			old_pitch=pitch;			
+		}
+	}
+
+	if((roll&0x80)!=0x80)
+	{
+		if(old_roll!=roll)
+		{
+			printf("R\n");
+			old_roll=roll;			
+		}
+	}
+	
+	if((roll&0x80)==0x80)
+	{
+		if(old_roll!=roll)
+		{
+			printf("r\n");
+			old_roll=roll;			
+		}		
+	}
+
+	if((yaw&0x80)!=0x80)
+	{
+		if(old_yaw!=yaw)
+		{
+			printf("Y\n");
+			old_yaw=yaw;			
+		}
+	}
+	
+	if((yaw&0x80)==0x80)
+	{
+		if(old_yaw!=yaw)
+		{
+			printf("y\n");
+			old_yaw=yaw;			
+		}		
+	}
+}
+
+
 void process_input() 
 {
 	char c;
@@ -89,6 +204,21 @@ void process_input()
 
 }
 
+//panic mode state makis
+void panic_mode()
+{
+	nrf_gpio_pin_write(RED,0);
+	nrf_gpio_pin_write(YELLOW,0);
+	cur_mode=PANIC_MODE;
+	ae[0]=ae[0]/2;
+	ae[1]=ae[1]/2;
+	ae[2]=ae[2]/2;
+	ae[3]=ae[3]/2;
+	nrf_delay_ms(1000);
+	
+	statefunc=safe_mode;
+}
+
 //manual mode state makis
 void manual_mode()
 {
@@ -100,7 +230,7 @@ void manual_mode()
 	switch (pc_packet.mode)
 	{
 		case PANIC_MODE:
-			printf("B\n");
+			//printf("B\n");
 			cur_lift=0;
 			cur_pitch=0;
 			cur_roll=0;
@@ -109,7 +239,7 @@ void manual_mode()
 			old_pitch=0;
 			old_roll=0;
 			old_yaw=0;
-			//statefunc=panic_mode;
+			statefunc=panic_mode;
 			break;
 		case MANUAL_MODE:
 			cur_lift=pc_packet.lift;
@@ -133,6 +263,7 @@ void safe_mode()
 	ae[3]=0;
 	process_input();
 	nrf_gpio_pin_write(RED,0);
+	nrf_gpio_pin_write(YELLOW,1);
 	switch (pc_packet.mode)
 	{
 		case MANUAL_MODE:
