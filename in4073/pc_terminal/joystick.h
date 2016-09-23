@@ -125,12 +125,14 @@ struct JS_DATA_SAVE_TYPE {
 };
 
 
-/******************************/
-/* Custom mapping             */
-/******************************/
 #define JS_DEV	"/dev/input/js0"
 
 #define JS_MIN_VALUE 8500
 #define JS_STEP_DIVISION_SMALL 32
+
+#define LIFT         0x10
+#define YAW          0x20
+#define PITCH        0x40
+#define ROLL         0x08
 
 #endif /* _LINUX_JOYSTICK_H */
