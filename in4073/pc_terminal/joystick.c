@@ -12,13 +12,31 @@
 #include <string.h>
 
 #include "joystick.h"
-#include "packet.h"
+#include "../protocol/protocol.h"
+#include "globals.h"
 
+void push_packet(char direction, char value)
+{
+	switch (direction)
+  {	case LIFT:
+	js_lift = value;
+	printf ("LIFT: %d \n\n", js_lift);
+	break;
+	case PITCH:
+	js_pitch = value;
+	printf ("PITCH: %d \n\n", js_pitch);
+	break;
+	case ROLL:
+	js_roll = value;
+	printf ("ROLL: %d \n\n", js_roll);
+	break;
+	case YAW:
+	js_yaw = value;
+	printf ("YAW: %d \n\n", js_yaw);
+	break;
+  }	
+}
 
-/* current axis and button readings
- */
-int	axis[6];
-int	button[12];
 
 /* time */
 unsigned int mon_time_ms(void)
@@ -56,11 +74,8 @@ void set_js_packet(char direction, int axis, int divisor)
 		throttle_on_scale = -1000;
 
 	send_value = throttle_on_scale/1000.0*multiplier;
+	push_packet(direction, send_value);
 
-	js_p.mode = EMPTY;
-	js_p.type = direction;
-	js_p.data = send_value;
-	printf ("packet.mode: %d, packet.type: %d, packet.data: %d \n\n", js_p.mode, js_p.type, js_p.data);
 }
 
 int read_js(int fd)
