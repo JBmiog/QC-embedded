@@ -26,6 +26,7 @@ char mode = 0;
 
 int	axis[6];
 int	button[12];
+int fd = 0;
 
 
 packet mypacket;
