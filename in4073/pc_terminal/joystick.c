@@ -17,26 +17,24 @@
 
 void push_packet(char direction, char value)
 {
-	packet p;
 	switch (direction)
   {	case LIFT:
-	p.lift = value;
-	printf ("LIFT: %d \n\n", p.lift);
+	js_lift = value;
+	printf ("LIFT: %d \n\n", js_lift);
 	break;
 	case PITCH:
-	p.pitch = value;
-	printf ("PITCH: %d \n\n", p.pitch);
+	js_pitch = value;
+	printf ("PITCH: %d \n\n", js_pitch);
 	break;
 	case ROLL:
-	p.roll = value;
-	printf ("ROLL: %d \n\n", p.roll);
+	js_roll = value;
+	printf ("ROLL: %d \n\n", js_roll);
 	break;
 	case YAW:
-	p.yaw = value;
-	printf ("YAW: %d \n\n", p.yaw);
+	js_yaw = value;
+	printf ("YAW: %d \n\n", js_yaw);
 	break;
   }	
-	js_p_buffer[counter++] = p;
 }
 
 
@@ -177,7 +175,6 @@ int main(){
 	fcntl(fd, F_SETFL, O_NONBLOCK);	
 	while (a == 0){
 	a = read_js(fd);
-	counter = 0;
 	}
 	return 0;
 }
