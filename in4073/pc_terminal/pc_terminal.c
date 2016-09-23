@@ -234,7 +234,7 @@ void print_static_offsets() {
 
 /*jmi*/
 char get_checksum() {	
-	char checksum = ( mypacket.header^mypacket.mode^mypacket.p_adjust^mypacket.lift^mypacket.pitch^mypacket.roll^mypacket.yaw) >> 1;
+	char checksum = (mypacket.header^mypacket.mode^mypacket.p_adjust^mypacket.lift^mypacket.pitch^mypacket.roll^mypacket.yaw) >> 1;
 	return checksum;
 }
 

@@ -179,20 +179,41 @@ void actuate(char lift1, char pitch1, char roll1, char yaw1)
 }
 
 
+
+/*jmi*/
+char get_checksum(packet p) {	
+	char checksum = (p.header^p.mode^p.p_adjust^p.lift^p.pitch^p.roll^p.yaw) >> 1;
+	return checksum;
+}
+
+/*jmi*/
 void process_input() 
 {
+	//temporary package before checksum validation
+	packet tp; 
 	char c;
 	/*skip through all input untill header is found*/
 	while ( (c = dequeue(&rx_queue) ) != HEADER_VALUE) {
 	}
-	pc_packet.header = c;
-	pc_packet.mode = dequeue(&rx_queue);		
-	pc_packet.p_adjust = dequeue(&rx_queue);
-	pc_packet.lift = dequeue(&rx_queue);
-	pc_packet.pitch = dequeue(&rx_queue);
-	pc_packet.roll = dequeue(&rx_queue);
-	pc_packet.yaw = dequeue(&rx_queue);
-	pc_packet.checksum = dequeue(&rx_queue);
+	tp.header = c;
+	tp.mode = dequeue(&rx_queue);		
+	tp.p_adjust = dequeue(&rx_queue);
+	tp.lift = dequeue(&rx_queue);
+	tp.pitch = dequeue(&rx_queue);
+	tp.roll = dequeue(&rx_queue);
+	tp.yaw = dequeue(&rx_queue);
+	tp.checksum = dequeue(&rx_queue);
+
+	//if checksum is correct,copy whole packet into global packet	
+	if (tp.checksum == (get_checksum(tp) & 0x7F)) {
+		pc_packet.mode = tp.mode;
+		pc_packet.p_adjust = tp.p_adjust;
+		pc_packet.lift = tp.lift;
+		pc_packet.pitch = tp.pitch;
+		pc_packet.roll = tp.roll;
+		pc_packet.yaw = tp.yaw;
+		pc_packet.checksum = tp.checksum;
+	}
 
 	//printf("head:%x, mod:%x,padjust:%x,lift:%x,pitch:%x,roll:%x,yaw:%x,check:%x\n" ,pc_packet.header,pc_packet.mode,pc_packet.p_adjust,pc_packet.lift,pc_packet.pitch,pc_packet.roll,pc_packet.yaw,pc_packet.checksum);
 	//nrf_delay_ms(100);
