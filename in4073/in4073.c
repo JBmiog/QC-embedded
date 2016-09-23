@@ -76,7 +76,8 @@ void process_input(char c)
 	pc_packet.roll = dequeue(&rx_queue);
 	pc_packet.yaw = dequeue(&rx_queue);
 	pc_packet.checksum = dequeue(&rx_queue);
-	printf("h:%x, m:%x,..,c:%x\n",pc_packet.header,pc_packet.mode,pc_packet.checksum);
+	printf("head:%x, mod:%x,padjust:%x,lift:%x,pitch:%x,roll:%x,yaw:%x,check:%x\n" ,pc_packet.header,pc_packet.mode,pc_packet.p_adjust,pc_packet.lift,pc_packet.pitch,pc_packet.roll,pc_packet.yaw,pc_packet.checksum);
+	
 	if(pc_packet.mode == 0x03){
 		nrf_gpio_pin_write(YELLOW,0);
 	} else {
