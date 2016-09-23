@@ -16,6 +16,7 @@
 #include "../protocol/protocol.h"
 #include "globals.h"
 #include "keyboard.h"
+#include "joystick.h"
 
 
 #define NANO_SECOND_MULTIPLIER 1000000
@@ -24,6 +25,16 @@
  *------------------------------------------------------------
  */
 struct termios 	savetty;
+
+void joystick_init()
+{
+	
+	if ((fd = open(JS_DEV, O_RDONLY)) < 0) {
+		perror("jstest");
+	}
+	// non-blocking mode
+	fcntl(fd, F_SETFL, O_NONBLOCK);	
+}
 
 void	term_initio()
 {
@@ -299,6 +310,8 @@ int main(int argc, char **argv)
 	tim.tv_sec  = 0;
 	tim.tv_nsec = interval_ms;
 	
+	joystick_init();
+	
 	while(1){
 		/*delay +/- 100 ms*/
 		if(nanosleep(&tim , &tim2) < 0 )  {
@@ -308,7 +321,9 @@ int main(int argc, char **argv)
 		printf("creating apcket\n");
 		create_packet();
 		tx_packet();		
-
+		
+		read_js(fd);
+		
 		while ((c = term_getchar_nb()) != -1) {
 			kb_input_handler(c);
 			term_putchar('>');
