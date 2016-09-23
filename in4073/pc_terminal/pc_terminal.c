@@ -185,6 +185,7 @@ void kb_input_handler(char pressed_key){
 					break;
 		case ONE: 	mode = PANIC_MODE; break;
 		case TWO:	mode = MANUAL_MODE; break;
+		case THREE:	mode = CALIBRATION_MODE; break;
 		case FOUR:	mode = YAW_CONTROLLED_MODE; break;
 		case FIVE:	mode = FULL_CONTROL_MODE; break;
 		case SIX:	mode = RAW_MODE; break;
@@ -320,11 +321,11 @@ int main(int argc, char **argv)
 				term_putchar(c);
 			}
 			term_putchar('\n');
-			/*flush the rest of the input buffer*/	
+			/*flush the rest of the input buffer */	
 			while ((c = rs232_getchar_nb()) != -1){ 				
 				term_putchar(c);
 			}		
-			}
+		}
 	}
 
 	term_exitio();

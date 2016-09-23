@@ -13,29 +13,6 @@
  *------------------------------------------------------------------
  */
 
-#include "in4073.h"
-#include "protocol/protocol.h"
-packet pc_packet;
-/*------------------------------------------------------------------
- * process incomming packets
- * edited by jmi
- *------------------------------------------------------------------
- */
-void process_input(char c) 
-{
-	if(c == HEADER_VALUE) {
-		//while(rx_queue.count < 8){} 
-		pc_packet.header = c;
-		pc_packet.mode = dequeue(&rx_queue);		
-		pc_packet.p_adjust = dequeue(&rx_queue);
-		pc_packet.lift = dequeue(&rx_queue);
-		pc_packet.pitch = dequeue(&rx_queue);
-		pc_packet.roll = dequeue(&rx_queue);
-		pc_packet.yaw = dequeue(&rx_queue);
-		pc_packet.checksum = dequeue(&rx_queue);
-		printf("h:%x, m:%x,..,c:%x\n",pc_packet.header,pc_packet.mode,pc_packet.checksum);
-	}			
-
 
 /*
 
@@ -76,6 +53,41 @@ void process_input(char c)
 			nrf_gpio_pin_toggle(RED);
 	}
 	*/
+
+
+#include "in4073.h"
+#include "protocol/protocol.h"
+packet pc_packet;
+/*------------------------------------------------------------------
+ * process incomming packets
+ * edited by jmi
+ *------------------------------------------------------------------
+ */
+void process_input(char c) 
+{
+	/*skip through all input untill header is found*/
+	while ( (c = dequeue(&rx_queue) ) != HEADER_VALUE) {
+	}
+	pc_packet.header = c;
+	pc_packet.mode = dequeue(&rx_queue);		
+	pc_packet.p_adjust = dequeue(&rx_queue);
+	pc_packet.lift = dequeue(&rx_queue);
+	pc_packet.pitch = dequeue(&rx_queue);
+	pc_packet.roll = dequeue(&rx_queue);
+	pc_packet.yaw = dequeue(&rx_queue);
+	pc_packet.checksum = dequeue(&rx_queue);
+	printf("h:%x, m:%x,..,c:%x\n",pc_packet.header,pc_packet.mode,pc_packet.checksum);
+	if(pc_packet.mode == 0x03){
+		nrf_gpio_pin_write(YELLOW,0);
+	} else {
+		nrf_gpio_pin_write(YELLOW,1);
+	}
+
+	/*flush rest of queue*/
+	while (rx_queue.count >= 1) {
+		dequeue(&rx_queue);
+	}
+
 }
 
 /*------------------------------------------------------------------
@@ -101,24 +113,26 @@ int main(void)
 	while (!demo_done)
 	{	
 		if (rx_queue.count) process_input( dequeue(&rx_queue) ); 
-
+		
 		if (check_timer_flag()) 
 		{
-			if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
-
-			adc_request_sample();
-			read_baro();
+			if (counter++%20 == 0) { 
+				nrf_gpio_pin_toggle(BLUE);
+			}
+			//adc_request_sample();
+			//read_baro();
 
 			clear_timer_flag();
 		}
  
 		if (check_sensor_int_flag()) 
 		{
-			get_dmp_data();
-			run_filters_and_control();
+			//get_dmp_data();
+			//run_filters_and_control();
 
 			clear_sensor_int_flag();
 		}
+		
 	}	
 	
 	printf("\n\t Goodbye \n\n");
