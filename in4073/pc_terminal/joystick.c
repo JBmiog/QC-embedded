@@ -12,13 +12,33 @@
 #include <string.h>
 
 #include "joystick.h"
-#include "packet.h"
+#include "../protocol/protocol.h"
+#include "globals.h"
 
+void push_packet(char direction, char value)
+{
+	packet p;
+	switch (direction)
+  {	case LIFT:
+	p.lift = value;
+	printf ("LIFT: %d \n\n", p.lift);
+	break;
+	case PITCH:
+	p.pitch = value;
+	printf ("PITCH: %d \n\n", p.pitch);
+	break;
+	case ROLL:
+	p.roll = value;
+	printf ("ROLL: %d \n\n", p.roll);
+	break;
+	case YAW:
+	p.yaw = value;
+	printf ("YAW: %d \n\n", p.yaw);
+	break;
+  }	
+	js_p_buffer[counter++] = p;
+}
 
-/* current axis and button readings
- */
-int	axis[6];
-int	button[12];
 
 /* time */
 unsigned int mon_time_ms(void)
@@ -56,11 +76,8 @@ void set_js_packet(char direction, int axis, int divisor)
 		throttle_on_scale = -1000;
 
 	send_value = throttle_on_scale/1000.0*multiplier;
+	push_packet(direction, send_value);
 
-	js_p.mode = EMPTY;
-	js_p.type = direction;
-	js_p.data = send_value;
-	printf ("packet.mode: %d, packet.type: %d, packet.data: %d \n\n", js_p.mode, js_p.type, js_p.data);
 }
 
 int read_js(int fd)
@@ -160,6 +177,7 @@ int main(){
 	fcntl(fd, F_SETFL, O_NONBLOCK);	
 	while (a == 0){
 	a = read_js(fd);
+	counter = 0;
 	}
 	return 0;
 }
