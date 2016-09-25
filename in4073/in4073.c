@@ -18,69 +18,158 @@
 #include "math.h"
 
 
-#define MILLION 1000000
+#define MAXZ 4000000
+#define MAXL 1000000
+#define MAXM 1000000
+#define MAXN 2000000
 #define BAT_THRESHOLD  1050
-packet pc_packet;
 
-/*------------------------------------------------------------------
- * process incomming packets
- * edited by jmi
- *------------------------------------------------------------------
- */
+
+#define int_to_fixed_point(a) (((int16_t)a)<<8)
+#define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
+#define fixed_point_to_int(a) (int)(a>>8)
+
+packet pc_packet;
 
 void actuate(char lift, char pitch, char roll, char yaw)
 {
-	float Z,M,L,N;
-	float t1,t2,t3,t4;
+	int Z,M,L,N,a1,a2,a3,a4;
+	int8_t l,p,r,y;
 
+	l=0;
+	p=0;
+	r=0;
+	y=0;
 
-
-	//first restore the sign bit to the msb!!!
-	lift=lift<<1;
-	pitch=pitch<<1;
-	roll=roll<<1;
-	yaw=yaw<<1;
-
-	//actuate motors depending on the values received
-	L=(roll/127)*(MILLION);
-	M=(pitch/127)*(MILLION);
-	N=(yaw/127)*(2*MILLION);
-	Z=(-1)*(lift/127)*(4*MILLION);
-
-	t1=(2*M-N-Z)/4;
-	t2=(2*L+N-Z)/4 - L;
-	t3=(2*M-N-Z)/4 - M;
-	t4=(2*L+N-Z)/4;
-	
-	if(t1<0)
+	//first restore the numbers as created in the pc-terminal!!!
+	if((lift&0x40)==0x40)
 	{
-		t1=10000;
+		lift=(64-(lift&0x3f));
+		l=0-lift;
+	}
+	else
+	{	
+		l=lift;	
 	}
 
-	if(t2<0)
+	if((pitch&0x40)==0x40)
 	{
-		t2=10000;
+		pitch=(64-(pitch&0x3f));
+		p=0-pitch;
+	}
+	else
+	{	
+		p=pitch;	
 	}
 
-	if(t3<0)
+	if((roll&0x40)==0x40)
 	{
-		t3=10000;
+		roll=(64-(roll&0x3f));
+		r=0-roll;
+	}
+	else
+	{	
+		r=roll;	
 	}
 
-	if(t4<0)
+	if((yaw&0x40)==0x40)
 	{
-		t4=10000;
+		yaw=(64-(yaw&0x3f));
+		y=0-yaw;
+	}
+	else
+	{	
+		y=yaw;	
 	}
 
-	ae[0]=(int16_t)sqrt(t1);
-	ae[1]=(int16_t)sqrt(t2);
-	ae[2]=(int16_t)sqrt(t3);
-	ae[3]=(int16_t)sqrt(t4);
-	
-	//ae[0]=200;
-	//ae[1]=200;
-	//ae[2]=0;
-	//ae[3]=0;
+	//calculate forces and moments
+	if(l>=0)
+	{
+		Z=divide_fixed_points(int_to_fixed_point(l),int_to_fixed_point(63));	
+		Z=Z*(MAXZ-start_z);
+		Z=fixed_point_to_int(Z)+start_z;
+	}
+	else
+	{
+		Z=divide_fixed_points(int_to_fixed_point(l),int_to_fixed_point(63));
+		Z=Z*start_z;
+		Z=fixed_point_to_int(Z)+start_z;
+	}
+
+	if(Z>0)
+	{
+		L=divide_fixed_points(int_to_fixed_point(r),int_to_fixed_point(63));
+		L=L*MAXL;	
+		L=fixed_point_to_int(L);
+
+		M=divide_fixed_points(int_to_fixed_point(p),int_to_fixed_point(63));
+		M=M*MAXM;
+		M=fixed_point_to_int(M);
+
+		N=divide_fixed_points(int_to_fixed_point(y),int_to_fixed_point(63));
+		N=N*2*MAXN;	
+		N=fixed_point_to_int(N);
+	//calculate the square of each motor rpm
+		a1=(2*M-N+Z)/4;
+		a2=(2*L+N+Z)/4-L;
+		a3=(2*M-N+Z)/4-M;
+		a4=(2*L+N+Z)/4;
+	//if the square is too high or too low then assign it to a minimum or maximum value
+		if(a1<0)
+		{
+			a1=2500;
+		}
+
+		if(a2<0)
+		{
+			a2=2500;
+		}
+
+		if(a3<0)
+		{
+			a3=2500;
+		}
+
+		if(a4<0)
+		{
+			a4=2500;
+		}
+		
+		if(a1>1000000)
+		{
+			a1=1000000;
+		}
+
+		if(a2>1000000)
+		{
+			a2=1000000;
+		}
+
+		if(a3>1000000)
+		{
+			a3=1000000;
+		}
+
+		if(a4>1000000)
+		{
+			a4=1000000;
+		}
+	}
+	//if there is no lift force everything should be shut down
+	else if(Z<=0)
+	{
+		a1=0;
+		a2=0;
+		a3=0;
+		a4=0;
+	}
+		
+	ae[0]=(int16_t)sqrt(a1);
+	ae[1]=(int16_t)sqrt(a2);
+	ae[2]=(int16_t)sqrt(a3);
+	ae[3]=(int16_t)sqrt(a4);
+	//printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
+	//nrf_delay_ms(300);
 	run_filters_and_control();
 	
 }
@@ -110,7 +199,6 @@ void process_input()
 	tp.roll = dequeue(&rx_queue);
 	tp.yaw = dequeue(&rx_queue);
 	tp.checksum = dequeue(&rx_queue);
-
 	//if checksum is correct,copy whole packet into global packet	
 	if (tp.checksum == (get_checksum(tp) & 0x7F)) {
 		pc_packet.mode = tp.mode;
@@ -134,41 +222,22 @@ void process_input()
 
 }
 
-//panic mode state makis
-void panic_mode()
-{
-	nrf_gpio_pin_write(RED,0);
-	nrf_gpio_pin_write(YELLOW,0);
-	cur_mode=PANIC_MODE;
-	ae[0]=ae[0]/2;
-	ae[1]=ae[1]/2;
-	ae[2]=ae[2]/2;
-	ae[3]=ae[3]/2;
-	run_filters_and_control();
-	nrf_delay_ms(1000);
-	
-	statefunc=safe_mode;
-}
+
 
 //manual mode state makis
 void manual_mode()
 {
 	cur_mode=MANUAL_MODE;
-	actuate(cur_lift,cur_pitch,cur_roll,cur_yaw);
-	process_input();
+
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,0);
+
+	actuate(cur_lift,cur_pitch,cur_roll,cur_yaw);
+
+	process_input();
 	switch (pc_packet.mode)
 	{
 		case PANIC_MODE:
-			cur_lift=0;
-			cur_pitch=0;
-			cur_roll=0;
-			cur_yaw=0;
-			old_lift=0;
-			old_pitch=0;
-			old_roll=0;
-			old_yaw=0;
 			statefunc=panic_mode;
 			break;
 		case MANUAL_MODE:
@@ -183,25 +252,48 @@ void manual_mode()
 	}
 }
 
+//panic mode state makis
+void panic_mode()
+{
+	cur_mode=PANIC_MODE;
+
+	nrf_gpio_pin_write(RED,0);
+	nrf_gpio_pin_write(YELLOW,0);
+
+	ae[0]=ae[0]/2;
+	ae[1]=ae[1]/2;
+	ae[2]=ae[2]/2;
+	ae[3]=ae[3]/2;
+	run_filters_and_control();
+
+	cur_lift=0;
+	cur_pitch=0;
+	cur_roll=0;
+	cur_yaw=0;
+
+	nrf_delay_ms(1000);
+
+	statefunc=safe_mode;
+}
+
 //safe mode state makis 
 void safe_mode()
 {
-	cur_mode=SAFE_MODE;	
+	cur_mode=SAFE_MODE;
+		
+	nrf_gpio_pin_write(RED,0);
+	nrf_gpio_pin_write(YELLOW,1);
+
 	ae[0]=0;
 	ae[1]=0;
 	ae[2]=0;
 	ae[3]=0;
 	run_filters_and_control();
+
 	process_input();
-	nrf_gpio_pin_write(RED,0);
-	nrf_gpio_pin_write(YELLOW,1);
 	switch (pc_packet.mode)
 	{
 		case MANUAL_MODE:
-			cur_lift=pc_packet.lift;
-			cur_pitch=pc_packet.pitch;
-			cur_roll=pc_packet.roll;
-			cur_yaw=pc_packet.yaw;
 			statefunc=manual_mode;
 			break;
 		default:
@@ -209,12 +301,7 @@ void safe_mode()
 	}
 }
 
-/*------------------------------------------------------------------
- * main -- do the test
- * edited by jmi
- *------------------------------------------------------------------
- */
-int main(void)
+void initialize()
 {
 	uart_init();
 	gpio_init();
@@ -224,9 +311,7 @@ int main(void)
 	imu_init(true, 100);	
 	baro_init();
 	spi_flash_init();
-//	ble_init();
-
-	//uint32_t counter = 0;
+	//ble_init();
 	demo_done = false;
 
 	/*makis init*/ 
@@ -235,18 +320,32 @@ int main(void)
 	pc_packet.pitch = 0;
 	pc_packet.roll = 0;
 	pc_packet.yaw = 0;	
+
+	cur_mode=SAFE_MODE;
 	cur_lift=0;
 	cur_pitch=0;
 	cur_roll=0;
 	cur_yaw=0;
-	old_lift=0;
-	old_pitch=0;
-	old_roll=0;
-	old_yaw=0;	
+	
 	cnt=0;
-	cur_mode=SAFE_MODE;
 
+	ae[0]=0;
+	ae[1]=0;
+	ae[2]=0;
+	ae[3]=0;
 
+	//later create a function for start_z
+	start_z=ae[0]*ae[0]+ae[1]*ae[1]+ae[2]*ae[2]+ae[3]*ae[3];
+}
+
+/*------------------------------------------------------------------
+ * main -- do the test
+ * edited by jmi
+ *------------------------------------------------------------------
+ */
+int main(void)
+{
+	initialize();
 	while (!demo_done)
 	{	
 		(*statefunc)();	
@@ -256,9 +355,9 @@ int main(void)
 			clear_timer_flag();
 			//printf("%4d\n", bat_volt);
 			
-			/*if (bat_volt < BAT_THRESHOLD) {
-				statefunc=panic_mode;
-			}*/	
+			//if (bat_volt < BAT_THRESHOLD) {
+			//	statefunc=panic_mode;
+			//}	
 		}
 		
 	}	
