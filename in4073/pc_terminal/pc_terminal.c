@@ -254,6 +254,26 @@ char get_checksum() {
 	return checksum;
 }
 
+char inspect_overflow(char offset, char js, char kb){
+	 
+	char temp_sum;
+	
+	if ((offset + js + kb) > 127)
+	{ 
+		temp_sum = ((127)>>1) & 0x7F;;	
+	}
+	else if ((offset + js + kb) < -127)
+	{
+		temp_sum = ((-127)>>1) & 0x7F;
+	}
+	else
+	{
+		temp_sum = ((offset + js + kb)>>1) & 0x7F;
+	}
+	
+	return temp_sum;
+}
+
 /* jmi 
 the &0x7F is for savety only, so we know MSB is only set in the
 header
@@ -263,10 +283,10 @@ void create_packet(){
 	mypacket.mode = mode;
 	//mypacket.p_adjust = 
 	/*here i need the joystick...?*/		
-	mypacket.lift = ((lift_offset + js_lift + kb_lift) >>1) & 0x7F;
-	mypacket.pitch = ((pitch_offset + js_pitch + kb_lift) >>1) & 0x7F;
-	mypacket.roll = ((roll_offset + js_roll + kb_roll) >> 1) & 0x7F;
-	mypacket.yaw = ((yaw_offset + js_yaw + kb_yaw) >>1) & 0x7F;
+	mypacket.lift = inspect_overflow(lift_offset, js_lift, kb_lift);
+	mypacket.pitch = inspect_overflow(pitch_offset, js_pitch, kb_pitch);
+	mypacket.roll = inspect_overflow(roll_offset, js_roll, kb_roll);
+	mypacket.yaw = inspect_overflow(yaw_offset, js_yaw, kb_yaw);
 	mypacket.checksum = get_checksum(mypacket) & 0x7F;	
 	print_packet();
 }
