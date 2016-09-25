@@ -26,7 +26,7 @@
  */
 struct termios 	savetty;
 
-void joystick_init()
+/*void joystick_init()
 {
 	
 	if ((fd = open(JS_DEV, O_RDONLY)) < 0) {
@@ -35,7 +35,7 @@ void joystick_init()
 	// non-blocking mode
 	fcntl(fd, F_SETFL, O_NONBLOCK);	
 }
-
+*/
 void	term_initio()
 {
 	struct termios tty;
@@ -202,11 +202,46 @@ void kb_input_handler(char pressed_key){
 		case SIX:	mode = RAW_MODE; break;
 		case SEVEN:	mode = HEIGHT_CONTROL_MODE; break;
 		case EIGHT:	mode = WIRELESS_MODE; break;
-		case 'a':	lift_offset += UP;  break;
-		case 'z':	lift_offset += DOWN;  break;
-		case 'q': 	yaw_offset += DOWN;  break;
-		case 'w':	yaw_offset += UP; break;
-		
+		case 'a':	
+			if((lift_offset+UP)>=126 || lift_offset==127 )
+			{
+				lift_offset=127;
+			}
+			else
+			{
+				lift_offset+=UP;
+			}
+			break;
+		case 'z':	
+			if((lift_offset<-120) && (lift_offset+DOWN>0))
+			{
+				lift_offset=-127;
+			}
+			else
+			{
+				lift_offset+=DOWN;
+			}
+			break;
+		case 'q': 	
+			if((yaw_offset<-120) && (yaw_offset+DOWN>0))
+			{
+				yaw_offset=-127;
+			}
+			else
+			{
+				yaw_offset+=DOWN;
+			}
+			break;
+		case 'w':
+			if((yaw_offset+UP)>=126 || yaw_offset==127 )
+			{
+				yaw_offset=127;
+			}
+			else
+			{
+				yaw_offset+=UP;
+			}
+			break;
 		//control loop values adjusting 
 		case 'u': 	yaw_offset_p = UP; 	break;
 		case 'j': 	yaw_offset_p = DOWN; break;
@@ -215,13 +250,49 @@ void kb_input_handler(char pressed_key){
 		case 'o':	roll_pitch_offset_p2 = UP; break;
 		case 'l': 	roll_pitch_offset_p2 = DOWN; break;
 		//arrow up
-		case 'A': pitch_offset += DOWN; break;
+		case 'A': 
+			if((pitch_offset<-120) && (pitch_offset+DOWN>0))
+			{
+				pitch_offset=-127;
+			}
+			else
+			{
+				pitch_offset+=DOWN;
+			}
+			break;
 		//arrow down
-		case 'B': pitch_offset += UP; break;
+		case 'B': 
+			if((pitch_offset+UP)>=126 || pitch_offset==127 )
+			{
+				pitch_offset=127;
+			}
+			else
+			{
+				pitch_offset+=UP;
+			}
+			break;
 		//arrow right					
-		case 'C': roll_offset += DOWN; break;
+		case 'C': 
+			if((roll_offset<-120) && (roll_offset+DOWN>0))
+			{
+				roll_offset=-127;
+			}
+			else
+			{
+				roll_offset+=DOWN;
+			}
+			break;
 		//arrow left
-		case 'D': roll_offset += UP; break;
+		case 'D': 
+			if((roll_offset+UP)>=126 || roll_offset==127 )
+			{
+				roll_offset=127;
+			}
+			else
+			{
+				roll_offset+=UP;
+			}
+			break;
 		
 		//own implementation
 		case 't':	kb_pitch = UP;
@@ -254,6 +325,28 @@ char get_checksum() {
 	return checksum;
 }
 
+char inspect_overflow(char offset, char js, char kb){
+	 
+	char temp_sum;
+	
+	if ((offset + js + kb) > 127)
+	{ 
+		temp_sum = ((127)>>1) & 0x7F;;	
+	}
+	else if ((offset + js + kb) < -127)
+	{
+		temp_sum = ((-127)>>1) & 0x7F;
+	}
+	else
+	{
+		temp_sum = ((offset + js + kb)>>1) & 0x7F;
+	}
+	
+	return temp_sum;
+}
+
+
+
 /* jmi 
 the &0x7F is for savety only, so we know MSB is only set in the
 header
@@ -263,12 +356,11 @@ void create_packet(){
 	mypacket.mode = mode;
 	//mypacket.p_adjust = 
 	/*here i need the joystick...?*/		
-	mypacket.lift = ((lift_offset + js_lift + kb_lift) >>1) & 0x7F;
-	mypacket.pitch = ((pitch_offset + js_pitch + kb_lift) >>1) & 0x7F;
-	mypacket.roll = ((roll_offset + js_roll + kb_roll) >> 1) & 0x7F;
-	mypacket.yaw = ((yaw_offset + js_yaw + kb_yaw) >>1) & 0x7F;
-	mypacket.checksum = get_checksum(mypacket) & 0x7F;	
-	print_packet();
+	mypacket.lift = inspect_overflow(lift_offset, js_lift, kb_lift);
+	mypacket.pitch = inspect_overflow(pitch_offset, js_pitch, kb_pitch);
+	mypacket.roll = inspect_overflow(roll_offset, js_roll, kb_roll);
+	mypacket.yaw = inspect_overflow(yaw_offset, js_yaw, kb_yaw);
+	mypacket.checksum = get_checksum(mypacket) & 0x7F; 
 }
 
 
@@ -316,7 +408,7 @@ int main(int argc, char **argv)
 	tim.tv_sec  = 0;
 	tim.tv_nsec = interval_ms;
 	
-	joystick_init();
+	//joystick_init();
 	
 	while(1){
 		/*delay +/- 100 ms*/
@@ -324,11 +416,11 @@ int main(int argc, char **argv)
 			printf("Nano sleep system call failed \n");
 		}
 		
-		printf("creating apcket\n");
+	//	printf("creating apcket\n");
 		create_packet();
 		tx_packet();		
 		
-		read_js(fd);
+		//read_js(fd);
 		
 		while ((c = term_getchar_nb()) != -1) {
 			kb_input_handler(c);
@@ -361,5 +453,4 @@ int main(int argc, char **argv)
   	
 	return 0;
 }
-
 
