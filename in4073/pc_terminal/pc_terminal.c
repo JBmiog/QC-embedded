@@ -42,8 +42,7 @@ void push_packet(char direction, char value)
         //printf ("ROLL: %d \n\n", js_roll);
         break;
     case YAW:
-        //js_yaw = value;
-        js_yaw = 0;
+        js_yaw = value;
         //printf ("YAW: %d \n\n", js_yaw);
         break;
     }
