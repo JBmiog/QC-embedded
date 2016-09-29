@@ -147,21 +147,21 @@ void calculate_rpm(int Z, int L, int M, int N)
 		a4=(2*L+N+Z)/4;
 
 		//if movement is not possible, do what is possible				
-		if(a1<=0)
+		if(a1<=50000)
 		{
-			a1=50;
+			a1=50000;
 		}
-		if(a2<=0)
+		if(a2<=50000)
 		{
-			a2=50;
+			a2=50000;
 		}
-		if(a3<=0)
+		if(a3<=50000)
 		{
-			a3=50;
+			a3=50000;
 		}
-		if(a4<=0)
+		if(a4<=50000)
 		{
-			a4=50;
+			a4=50000;
 		}
 		if(a1>1000000)
 		{
@@ -193,8 +193,8 @@ void calculate_rpm(int Z, int L, int M, int N)
 	ae[1]=a2>>10;
 	ae[2]=a3>>10;
 	ae[3]=a4>>10;
-	//printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
-	//nrf_delay_ms(300);	
+	printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
+	nrf_delay_ms(300);	
 	
 
 

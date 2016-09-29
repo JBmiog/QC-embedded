@@ -1,19 +1,4 @@
-#include <math.h>
-#include <time.h>
-#include <assert.h>
-#include <sys/ioctl.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-
 #include "joystick.h"
-#include "../protocol/protocol.h"
-#include "globals.h"
 
 void push_packet(char direction, char value)
 {

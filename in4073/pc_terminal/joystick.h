@@ -30,6 +30,23 @@
 
 #include <asm/types.h>
 #include <linux/input.h>
+#include <math.h>
+#include <time.h>
+#include <assert.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+
+
+#include "../protocol/protocol.h"
+#include "globals.h"
+
 
 /*
  * Version
@@ -134,5 +151,6 @@ struct JS_DATA_SAVE_TYPE {
 #define YAW          0x20
 #define PITCH        0x40
 #define ROLL         0x08
+
 
 #endif /* _LINUX_JOYSTICK_H */
