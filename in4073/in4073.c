@@ -147,21 +147,21 @@ void calculate_rpm(int Z, int L, int M, int N)
 		a4=(2*L+N+Z)/4;
 
 		//if movement is not possible, do what is possible				
-		if(a1<=50000)
+		if(a1<=50000*2)
 		{
-			a1=50000;
+			a1=50000*2;
 		}
-		if(a2<=50000)
+		if(a2<=50000*2)
 		{
-			a2=50000;
+			a2=50000*2;
 		}
-		if(a3<=50000)
+		if(a3<=50000*2)
 		{
-			a3=50000;
+			a3=50000*2;
 		}
-		if(a4<=50000)
+		if(a4<=50000*2)
 		{
-			a4=50000;
+			a4=50000*2;
 		}
 		if(a1>1000000)
 		{
@@ -194,7 +194,7 @@ void calculate_rpm(int Z, int L, int M, int N)
 	ae[2]=a3>>10;
 	ae[3]=a4>>10;
 	//printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
-	//nrf_delay_ms(300);	
+	//nrf_delay_ms(15);	
 	run_filters_and_control();
 
 
@@ -485,7 +485,7 @@ int main(void)
 			//printf("bat voltage %d below threshold %d \n",bat_volt, BAT_THRESHOLD);
 			if (bat_volt < 1050)
 			{
-				printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
+				//printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
 				nrf_delay_ms(1000);
 				statefunc=panic_mode;
 			}			

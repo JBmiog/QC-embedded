@@ -606,29 +606,26 @@ int main(int argc, char **argv)
     term_puts("\nType ^C to exit\n");
 
 
+    /* needed for sleeping mode */
+    struct timespec tim, tim2;
+    const long interval_ms = 100 * NANO_SECOND_MULTIPLIER;
+    tim.tv_sec  = 0;
+    tim.tv_nsec = interval_ms;
+
     joystick_init();
-	struct timespec ts;
-	timespec_get(&ts, TIME_UTC);
-	struct timespec {
-		time_t tv_sec;
-		long long tv_nsec;
-	};
-	
-	long long old_time, current_time;
-	
-	old_time = (ts.tv_nsec/NANO_SECOND_MULTIPLIER);
 
     while(1)
     {
-		
-		timespec_get(&ts, TIME_UTC);
-		current_time = (ts.tv_nsec/NANO_SECOND_MULTIPLIER);
-		if((current_time - old_time) > 70){
-	        create_packet();
-			tx_packet();
-			//printf("time elapsed = %lld\n",current_time-old_time);
-		}
-		old_time = current_time;
+        /*delay +/- 100 ms*/
+        if(nanosleep(&tim, &tim2) < 0 )
+        {
+            printf("Nano sleep system call failed \n");
+        }
+
+        //	printf("creating apcket\n");
+        create_packet();
+        tx_packet();
+
         read_js(fd);
 
         while ((c = term_getchar_nb()) != -1)
@@ -650,7 +647,7 @@ int main(int argc, char **argv)
             {
                 term_putchar(c);
             }
-            	term_putchar('\n');
+            term_putchar('\n');
 
             while ((c = rs232_getchar_nb()) != -1)
             {
