@@ -604,11 +604,11 @@ int main(int argc, char **argv)
 
     /* needed for sleeping mode */
     struct timespec tim, tim2;
-    const long interval_ms = 300 * NANO_SECOND_MULTIPLIER;
+    const long interval_ms = 100 * NANO_SECOND_MULTIPLIER;
     tim.tv_sec  = 0;
     tim.tv_nsec = interval_ms;
 
-    joystick_init();
+    //joystick_init();
 
     while(1)
     {
@@ -622,7 +622,7 @@ int main(int argc, char **argv)
         create_packet();
         tx_packet();
 
-        read_js(fd);
+        //read_js(fd);
 
         while ((c = term_getchar_nb()) != -1)
         {

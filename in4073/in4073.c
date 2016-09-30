@@ -189,13 +189,13 @@ void calculate_rpm(int Z, int L, int M, int N)
 		a4=0;
 	}
 	//get the final motor values	
-	ae[0]=a1>>10;
-	ae[1]=a2>>10;
-	ae[2]=a3>>10;
-	ae[3]=a4>>10;
-	printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
-	nrf_delay_ms(300);	
-	
+	ae[0]=a1>>8;
+	ae[1]=a2>>8;
+	ae[2]=a3>>8;
+	ae[3]=a4>>8;
+	//printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
+	//nrf_delay_ms(300);	
+	run_filters_and_control();
 
 
 }
@@ -305,7 +305,7 @@ void manual_mode()
 		old_roll=cur_roll;
 		old_pitch=cur_pitch;
 		old_yaw=cur_yaw;
-		run_filters_and_control();
+		//run_filters_and_control();
 	}	
 	
 	process_input();
@@ -352,7 +352,16 @@ void panic_mode()
 
 	nrf_delay_ms(1000);
 
-	statefunc=safe_mode;
+	ae[0]=0;
+	ae[1]=0;
+	ae[2]=0;
+	ae[3]=0;
+	run_filters_and_control();
+	while(1)
+	{
+		printf("panic mode");		
+		nrf_delay_ms(1000);
+	}
 }
 
 //safe mode state makis 
@@ -397,13 +406,14 @@ void initialize()
 	gpio_init();
 	timers_init();
 	adc_init();
+	
 	twi_init();
 	imu_init(true, 100);	
 	baro_init();
 	spi_flash_init();
 	//ble_init();
 	demo_done = false;
-
+	adc_request_sample();
 	/*makis init*/ 
 	pc_packet.mode = SAFE_MODE;
 	pc_packet.lift = 0;
@@ -458,26 +468,31 @@ void check_connection(uint32_t time)
  */
 int main(void)
 {
-	uint32_t time;
+	//uint32_t time;
 	initialize();
-	time = get_time_us();
+	//time = get_time_us();
 	counter2=counter1;
 	while (!demo_done)
-	{	
+	{		
 		(*statefunc)();
+		
+				
 		//check battery voltage every now and then	
 		if (check_timer_flag()) 
 		{
-			adc_request_sample();
 			clear_timer_flag();
-			//check battery voltage threshold			
-			//if (bat_volt < BAT_THRESHOLD)
-			//{
-			//	statefunc=panic_mode;
-			//}	
+			adc_request_sample();
+			//printf("bat voltage %d below threshold %d \n",bat_volt, BAT_THRESHOLD);
+			if (bat_volt < 1050)
+			{
+				printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
+				nrf_delay_ms(1000);
+				statefunc=panic_mode;
+			}			
+	
 		}
-		check_connection(time);
-		time=get_time_us();
+		//check_connection(time);
+		//time=get_time_us();
 	}	
 	
 	printf("\n\t Goodbye \n\n");
