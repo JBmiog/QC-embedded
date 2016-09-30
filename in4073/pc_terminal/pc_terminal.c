@@ -164,7 +164,7 @@ int read_js(int fd)
 	cc = total / 2 ;
     if (cc > JS_MIN_VALUE)
     {
-        set_js_packet(LIFT, axis[3], JS_STEP_DIVISION_SMALL);
+        set_js_packet(LIFT, cc, JS_STEP_DIVISION_SMALL);
     }
     else
     {
