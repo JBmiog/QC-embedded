@@ -144,7 +144,7 @@ struct JS_DATA_SAVE_TYPE {
 
 #define JS_DEV	"/dev/input/js0"
 
-#define JS_MIN_VALUE 100
+#define JS_MIN_VALUE 1000
 #define JS_STEP_DIVISION_SMALL 32
 
 #define LIFT         0x10

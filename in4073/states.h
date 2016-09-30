@@ -9,7 +9,7 @@ void manual_mode();
 void safe_mode();
 void panic_mode();
 void calibration_mode();
-void check_connection(uint32_t time);
+void check_connection();
 
 //state pointer, initialised to safe mode
 void (*statefunc)() = safe_mode;
@@ -48,6 +48,5 @@ int16_t q_off=0;
 int16_t r_off=0;
 
 //counters to take care of exiting when communication breaks down
-int counter1=0;
-int counter2=0;
+uint32_t time_latest_packet, current_time;
 

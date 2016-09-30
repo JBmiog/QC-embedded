@@ -23,6 +23,9 @@
 #define MAXN 2000000
 #define BAT_THRESHOLD  1050
 
+#define MIN_RPM 179200
+#define MAX_RPM 1000000
+
 #define int_to_fixed_point(a) (((int16_t)a)<<8)
 #define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
 #define fixed_point_to_int(a) (int)(a>>8)
@@ -146,38 +149,39 @@ void calculate_rpm(int Z, int L, int M, int N)
 		a3=(2*M-N+Z)/4-M;
 		a4=(2*L+N+Z)/4;
 
-		//if movement is not possible, do what is possible				
-		if(a1<=50000*2)
+		//minimum rpm
+		if(a1<=MIN_RPM)
 		{
-			a1=50000*2;
+			a1=MIN_RPM;
 		}
-		if(a2<=50000*2)
+		if(a2<=MIN_RPM)
 		{
-			a2=50000*2;
+			a2=MIN_RPM;
 		}
-		if(a3<=50000*2)
+		if(a3<=MIN_RPM)
 		{
-			a3=50000*2;
+			a3=MIN_RPM;
 		}
-		if(a4<=50000*2)
+		if(a4<=MIN_RPM)
 		{
-			a4=50000*2;
+			a4=MIN_RPM;
 		}
-		if(a1>1000000)
+		//maximum rpm
+		if(a1>MAX_RPM)
 		{
-			a1=1000000;
+			a1=MAX_RPM;
 		}
-		if(a2>1000000)
+		if(a2>MAX_RPM)
 		{
-			a2=1000000;
+			a2=MAX_RPM;
 		}
-		if(a3>1000000)
+		if(a3>MAX_RPM)
 		{
-			a3=1000000;
+			a3=MAX_RPM;
 		}
-		if(a4>1000000)
+		if(a4>MAX_RPM)
 		{
-			a4=1000000;
+			a4=MAX_RPM;
 		}
 	}
 	//if there is no lift force everything should be shut down
@@ -193,8 +197,8 @@ void calculate_rpm(int Z, int L, int M, int N)
 	ae[1]=a2>>10;
 	ae[2]=a3>>10;
 	ae[3]=a4>>10;
-	//printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
-	//nrf_delay_ms(15);	
+	printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
+	nrf_delay_ms(15);	
 	run_filters_and_control();
 
 
@@ -232,7 +236,8 @@ void process_input()
 		pc_packet.roll = tp.roll;
 		pc_packet.yaw = tp.yaw;
 		pc_packet.checksum = tp.checksum;
-		counter1++;
+		time_latest_packet = get_time_us();
+		printf("time_latest_packet = %ld\n",time_latest_packet);
 		//printf("%d - %d - %d - %d\n",pc_packet.roll,pc_packet.pitch,pc_packet.yaw,pc_packet.lift);
 		//nrf_delay_ms(50);
 	}
@@ -443,22 +448,18 @@ void initialize()
 	start_z=ae[0]*ae[0]+ae[1]*ae[1]+ae[2]*ae[2]+ae[3]*ae[3];
 }
 //if nothing received for over 400ms approximately go to panic mode and exit, makis
-void check_connection(uint32_t time)
+void check_connection()
 {
-	if(get_time_us()-time>400000)
-	{
-		if(counter1==counter2)
-		{
-			statefunc=panic_mode;
-			pc_packet.mode = SAFE_MODE;
-			pc_packet.lift = 0;
-			pc_packet.pitch = 0;
-			pc_packet.roll = 0;
-			pc_packet.yaw = 0;
-		}
-		counter2=counter1;
-	}	
-
+	current_time=get_time_us();
+	if((current_time-time_latest_packet) > 400000)
+	{	
+		statefunc=panic_mode;
+		pc_packet.mode = SAFE_MODE;
+		pc_packet.lift = 0;
+		pc_packet.pitch = 0;
+		pc_packet.roll = 0;
+		pc_packet.yaw = 0;
+	}
 }
 
 /*------------------------------------------------------------------
@@ -466,33 +467,36 @@ void check_connection(uint32_t time)
  * edited by jmi
  *------------------------------------------------------------------
  */
+
+
 int main(void)
 {
-	//uint32_t time;
 	initialize();
-	//time = get_time_us();
-	counter2=counter1;
+	time_latest_packet = get_time_us();
+	current_time = get_time_us();
+	nrf_delay_ms(15);
 	while (!demo_done)
 	{		
 		(*statefunc)();
-		
-				
+		check_connection();
+		printf("current_time= %ld, packet_time=%ld, dif = %ld\n", current_time , time_latest_packet, current_time-time_latest_packet);
+		nrf_delay_ms(15);
+
 		//check battery voltage every now and then	
 		if (check_timer_flag()) 
 		{
 			clear_timer_flag();
 			adc_request_sample();
 			//printf("bat voltage %d below threshold %d \n",bat_volt, BAT_THRESHOLD);
-			if (bat_volt < 1050)
-			{
+			//if (bat_volt < 1050)
+			//{
 				//printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
-				nrf_delay_ms(1000);
-				statefunc=panic_mode;
-			}			
+				//nrf_delay_ms(1000);
+				//statefunc=panic_mode;
+			//}			
 	
 		}
-		//check_connection(time);
-		//time=get_time_us();
+		
 	}	
 	
 	printf("\n\t Goodbye \n\n");
