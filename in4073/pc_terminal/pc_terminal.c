@@ -608,7 +608,7 @@ int main(int argc, char **argv)
     tim.tv_sec  = 0;
     tim.tv_nsec = interval_ms;
 
-    //joystick_init();
+    joystick_init();
 
     while(1)
     {
@@ -622,7 +622,7 @@ int main(int argc, char **argv)
         create_packet();
         tx_packet();
 
-        //read_js(fd);
+        read_js(fd);
 
         while ((c = term_getchar_nb()) != -1)
         {

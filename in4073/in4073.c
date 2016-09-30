@@ -189,10 +189,10 @@ void calculate_rpm(int Z, int L, int M, int N)
 		a4=0;
 	}
 	//get the final motor values	
-	ae[0]=a1>>8;
-	ae[1]=a2>>8;
-	ae[2]=a3>>8;
-	ae[3]=a4>>8;
+	ae[0]=a1>>9;
+	ae[1]=a2>>9;
+	ae[2]=a3>>9;
+	ae[3]=a4>>9;
 	//printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
 	//nrf_delay_ms(300);	
 	run_filters_and_control();
