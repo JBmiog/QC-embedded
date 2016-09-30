@@ -92,6 +92,8 @@ void set_js_packet(char direction, int axis, int divisor)
 int read_js(int fd)
 {
     struct js_event js;
+    unsigned int total;
+	int cc;
     //unsigned int t;
 
     //mon_delay_ms(50);
@@ -158,7 +160,9 @@ int read_js(int fd)
     }
 
     //lift
-    if (axis[3] < -JS_MIN_VALUE || axis[3] > JS_MIN_VALUE)
+    total = 65534 - (axis[3] + 32767);
+	cc = total / 2 ;
+    if (cc > JS_MIN_VALUE)
     {
         set_js_packet(LIFT, axis[3], JS_STEP_DIVISION_SMALL);
     }
