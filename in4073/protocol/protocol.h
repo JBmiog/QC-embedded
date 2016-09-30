@@ -22,8 +22,8 @@
 #define p2_down					0x80
 
 // data
-#define UP           			0x9
-#define DOWN         			0xF7
+#define UP           			1
+#define DOWN         			-1
 #define HEADER_VALUE 			0x80
 typedef struct {
 	char header;
