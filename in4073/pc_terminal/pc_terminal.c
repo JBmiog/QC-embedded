@@ -121,9 +121,25 @@ int read_js(int fd)
         exit(1);
     }
 
-    //exit program
+    //mode switch
     if (button[0])
-        return 1;
+        mode = PANIC_MODE;
+    if (button[1])
+        mode = SAFE_MODE;
+    if (button[2])
+        mode = MANUAL_MODE;
+    if (button[3])
+        mode = CALIBRATION_MODE;
+    if (button[4])
+        mode = YAW_CONTROLLED_MODE;
+    if (button[5])
+        mode = FULL_CONTROL_MODE;
+    if (button[6])
+        mode = RAW_MODE;
+    if (button[7])
+        mode = HEIGHT_CONTROL_MODE;
+    if (button[8])
+        mode = WIRELESS_MODE;
 
     //roll
     if(axis[0] < -JS_MIN_VALUE || axis[0] > JS_MIN_VALUE)
@@ -607,28 +623,21 @@ int main(int argc, char **argv)
 
 
     joystick_init();
-	struct timespec ts;
-	timespec_get(&ts, TIME_UTC);
-	struct timespec {
-		time_t tv_sec;
-		long long tv_nsec;
-	};
 	
-	long long old_time, current_time;
-	
-	old_time = (ts.tv_nsec/NANO_SECOND_MULTIPLIER);
+	unsigned int old_time, current_time;
+	old_time = mon_time_ms();
 
     while(1)
     {
 		
-		timespec_get(&ts, TIME_UTC);
-		current_time = (ts.tv_nsec/NANO_SECOND_MULTIPLIER);
-		if((current_time - old_time) > 70){
-	        create_packet();
-			tx_packet();
-			//printf("time elapsed = %lld\n",current_time-old_time);
-		}
-		old_time = current_time;
+	current_time=mon_time_ms();	
+	if((current_time - old_time) > 100)
+	{
+        	create_packet();
+		tx_packet();
+		//printf("time elapsed = %d , %d - %d\n",current_time-old_time,current_time,old_time);
+		old_time=current_time;
+	}
         read_js(fd);
 
         while ((c = term_getchar_nb()) != -1)
