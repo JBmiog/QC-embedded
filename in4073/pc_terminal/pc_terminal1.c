@@ -121,9 +121,25 @@ int read_js(int fd)
         exit(1);
     }
 
-    //exit program
+    //mode switch
     if (button[0])
-        return 1;
+        mode = PANIC_MODE;
+    if (button[1])
+        mode = SAFE_MODE;
+    if (button[2])
+        mode = MANUAL_MODE;
+    if (button[3])
+        mode = CALIBRATION_MODE;
+    if (button[4])
+        mode = YAW_CONTROLLED_MODE;
+    if (button[5])
+        mode = FULL_CONTROL_MODE;
+    if (button[6])
+        mode = RAW_MODE;
+    if (button[7])
+        mode = HEIGHT_CONTROL_MODE;
+    if (button[8])
+        mode = WIRELESS_MODE;
 
     //roll
     if(axis[0] < -JS_MIN_VALUE || axis[0] > JS_MIN_VALUE)
