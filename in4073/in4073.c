@@ -199,6 +199,76 @@ void calibration_mode()
 }
 
 
+void yaw_control_mode()
+{
+
+	cur_mode=YAW_CONTROLLED_MODE;
+
+	nrf_gpio_pin_write(RED,0);
+	nrf_gpio_pin_write(YELLOW,1);
+	nrf_gpio_pin_write(GREEN,0);
+
+	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
+	{
+		lift_force=calculate_Z(cur_lift);
+		roll_moment=calculate_L(cur_roll);
+		pitch_moment=calculate_M(cur_pitch);
+		yaw_moment=calculate_N(cur_yaw);
+		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
+		old_lift=cur_lift;
+		old_roll=cur_roll;
+		old_pitch=cur_pitch;
+		old_yaw=cur_yaw;
+		run_filters_and_control();
+		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+	}	
+	
+
+	while(msg==false && connection==true)
+	{
+		check_connection();
+		if (check_sensor_int_flag())
+		{
+			get_dmp_data();				
+			clear_sensor_int_flag();
+			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*32)*p_ctrl);
+			//printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+		}
+	}
+	
+	process_input();
+	switch (pc_packet.mode)	
+	{
+		case PANIC_MODE:
+			statefunc=panic_mode;
+			break;
+		case YAW_CONTROLLED_MODE:
+			cur_lift=pc_packet.lift;
+			cur_pitch=pc_packet.pitch;
+			cur_roll=pc_packet.roll;
+			cur_yaw=pc_packet.yaw;
+			if(pc_packet.p_adjust==1)
+			{
+				p_ctrl=p_ctrl+1;
+			}
+			if(pc_packet.p_adjust==2)
+			{
+				p_ctrl=p_ctrl-1;
+				if(p_ctrl<=1)
+				{
+					p_ctrl=1;
+				}
+			}
+		default:
+			break;
+	}
+
+
+	
+
+}
+
+
 //manual mode state makis
 void manual_mode()
 {
@@ -225,7 +295,7 @@ void manual_mode()
 	}	
 
 	//while there is no message received wait here and check your connection	
-	while(msg==false)
+	while(msg==false && connection==true)
 	{
 		check_connection();
 	}
@@ -343,6 +413,14 @@ void safe_mode()
 				r_off=0;
 				statefunc=calibration_mode;
 				break;
+			case YAW_CONTROLLED_MODE:
+				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
+				{
+					//print your changed state
+					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",YAW_CONTROLLED_MODE,ae[0],ae[1],ae[2],ae[3],bat_volt);
+					statefunc=yaw_control_mode;
+				}
+				break;
 			default:
 				break;
 		}
@@ -442,6 +520,7 @@ void initialize()
 	battery=true;
 	connection=true;
 	safe_print=true;
+	p_ctrl=10;
 	//first get to safe mode
 	statefunc= safe_mode;
 }
@@ -451,8 +530,6 @@ void check_connection()
 {
 	current_time_us=get_time_us();
 	uint32_t diff = current_time_us - time_latest_packet_us;
-	//printf("current time = %ld, last_packet_time = %ld diff = %ld \n", current_time_us, time_latest_packet_us, diff);
-	nrf_delay_ms(10);
 	if(diff > 500000)
 	{	
 		connection=false;
@@ -471,7 +548,7 @@ int main(void)
 {
 	//initialize the drone
 	initialize();
-
+	
 	while (!demo_done)
 	{		
 		
@@ -482,15 +559,14 @@ int main(void)
 		if (check_timer_flag()) 
 		{
 			clear_timer_flag();
-			//printf("current mode= %d, motor0=%d, motor1=%d, motor2=%d, motor3=%d, battery=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
 			adc_request_sample();
 	
-			//if (bat_volt < 1050)
-			//{
-				//printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
-				//battery=false;
-				//statefunc=panic_mode;
-			//}			
+			if (bat_volt < 1050)
+			{
+				printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
+				battery=false;
+				statefunc=panic_mode;
+			}		
 	
 		}
 	}	
