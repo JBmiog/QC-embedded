@@ -15,7 +15,6 @@
 #include "in4073.h"
 #include "protocol/protocol.h"
 #include "states.h"
-#include "math.h"
 
 #define MAXZ 4000000
 #define MAXL 1000000
@@ -30,40 +29,18 @@
 #define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
 #define fixed_point_to_int(a) (int)(a>>8)
 
-packet pc_packet;
 //calculate the Z force requested makis
 int calculate_Z(char lift)
 {
 	int Z;
 	int8_t l;
-	l=0;
+	l=lift;
+	Z=divide_fixed_points(int_to_fixed_point(l),int_to_fixed_point(63));	
+	Z=Z*MAXZ;
+	Z=fixed_point_to_int(Z);
+	return Z;
 
-	if((lift&0x40)==0x40)
-	{
-		lift=(64-(lift&0x3f));
-		l=0-lift;
-	}
-	else
-	{	
-		l=lift;	
-	}
-
-	if(l>=0)
-	{
-		Z=divide_fixed_points(int_to_fixed_point(l),int_to_fixed_point(63));	
-		Z=Z*(MAXZ-start_z);
-		Z=fixed_point_to_int(Z)+start_z;
-		return Z;
-	}
-	else
-	{
-		Z=divide_fixed_points(int_to_fixed_point(l),int_to_fixed_point(63));
-		Z=Z*start_z;
-		Z=fixed_point_to_int(Z)+start_z;
-		return Z;
-	}
-
-
+	
 }
 //calculate the L moment requested makis
 int calculate_L(char roll)
@@ -73,8 +50,7 @@ int calculate_L(char roll)
 	
 	if((roll&0x40)==0x40)
 	{
-		roll=(64-(roll&0x3f));
-		r=0-roll;
+		r=roll|0x80;
 	}
 	else
 	{	
@@ -99,8 +75,7 @@ int calculate_M(char pitch)
 
 	if((pitch&0x40)==0x40)
 	{
-		pitch=(64-(pitch&0x3f));
-		p=0-pitch;
+		p=pitch|0x80;
 	}
 	else
 	{	
@@ -121,8 +96,7 @@ int calculate_N(char yaw)
 
 	if((yaw&0x40)==0x40)
 	{
-		yaw=(64-(yaw&0x3f));
-		y=0-yaw;
+		y=yaw|0x80;
 	}
 	else
 	{	
@@ -139,69 +113,239 @@ int calculate_N(char yaw)
 //in this function calculate the values for the ae[] array makis
 void calculate_rpm(int Z, int L, int M, int N)
 {
-	int a1,a2,a3,a4;
-	//if there is no lift force don't calculate anything
+	int ae1[4],i;
+	//if there is lift force calculate ae[] array values
 	if(Z>0)
 	{		
 		//calculate the square of each motor rpm
-		a1=(2*M-N+Z)/4;
-		a2=(2*L+N+Z)/4-L;
-		a3=(2*M-N+Z)/4-M;
-		a4=(2*L+N+Z)/4;
+		ae1[0]=(2*M-N+Z)/4+MIN_RPM;
+		ae1[1]=(2*L+N+Z)/4-L+MIN_RPM;
+		ae1[2]=(2*M-N+Z)/4-M+MIN_RPM;
+		ae1[3]=(2*L+N+Z)/4+MIN_RPM;
 
 		//minimum rpm
-		if(a1<=MIN_RPM)
-		{
-			a1=MIN_RPM;
-		}
-		if(a2<=MIN_RPM)
-		{
-			a2=MIN_RPM;
-		}
-		if(a3<=MIN_RPM)
-		{
-			a3=MIN_RPM;
-		}
-		if(a4<=MIN_RPM)
-		{
-			a4=MIN_RPM;
+		for(i=0;i<4;i++)
+		{	
+			if(ae1[i]<MIN_RPM)
+			{
+				ae1[i]=MIN_RPM;
+			}
 		}
 		//maximum rpm
-		if(a1>MAX_RPM)
-		{
-			a1=MAX_RPM;
+		for(i=0;i<4;i++)
+		{	
+			if(ae1[i]>MAX_RPM)
+			{
+				ae1[i]=MAX_RPM;
+			}
 		}
-		if(a2>MAX_RPM)
-		{
-			a2=MAX_RPM;
-		}
-		if(a3>MAX_RPM)
-		{
-			a3=MAX_RPM;
-		}
-		if(a4>MAX_RPM)
-		{
-			a4=MAX_RPM;
-		}
+
+		//get the final motor values	
+		ae[0]=ae1[0]>>10;
+		ae[1]=ae1[1]>>10;
+		ae[2]=ae1[2]>>10;
+		ae[3]=ae1[3]>>10;
 	}
 	//if there is no lift force everything should be shut down
 	else if(Z<=0)
 	{
-		a1=0;
-		a2=0;
-		a3=0;
-		a4=0;
+		ae[0]=0;
+		ae[1]=0;
+		ae[2]=0;
+		ae[3]=0;
 	}
-	//get the final motor values	
-	ae[0]=a1>>10;
-	ae[1]=a2>>10;
-	ae[2]=a3>>10;
-	ae[3]=a4>>10;
-	printf("%d - %d - %d - %d\n ",ae[0], ae[1], ae[2], ae[3]);
-	nrf_delay_ms(15);	
+	//update motors
 	run_filters_and_control();
+}
+
+//calibration mode state makis
+void calibration_mode()
+{
+	cur_mode=CALIBRATION_MODE;
+	//indicate that you are in calibration mode
+	nrf_gpio_pin_write(RED,1);
+	nrf_gpio_pin_write(GREEN,0);
+	//counter
+	int clb;
+	clb=0;
+	//take 200 samples 
+	while(clb<200)
+	{
+		if (check_sensor_int_flag())
+		{
+			get_dmp_data();
+			clear_sensor_int_flag();
+			clb++;
+			p_off=p_off+sp;
+			q_off=q_off+sq;
+			r_off=r_off+sq;	
+		}	
+	}
+	//calculate the offset
+	p_off=p_off/200;
+	q_off=q_off/200;
+	r_off=r_off/200;
+	
+	//check the messages
+	process_input();
+	switch (pc_packet.mode)	
+	{
+		case SAFE_MODE:
+			statefunc=safe_mode;
+			break;
+		default:
+			break;
+	}
+}
 
 
+//manual mode state makis
+void manual_mode()
+{
+	cur_mode=MANUAL_MODE;
+
+	//indicate that you are in manual mode
+	nrf_gpio_pin_write(RED,1);
+	nrf_gpio_pin_write(YELLOW,0);
+
+	//if there is a new command do the calculations
+	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
+	{
+		lift_force=calculate_Z(cur_lift);
+		roll_moment=calculate_L(cur_roll);
+		pitch_moment=calculate_M(cur_pitch);
+		yaw_moment=calculate_N(cur_yaw);
+		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
+		old_lift=cur_lift;
+		old_roll=cur_roll;
+		old_pitch=cur_pitch;
+		old_yaw=cur_yaw;
+		//print your changed state
+		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+	}	
+
+	//while there is no message received wait here and check your connection	
+	while(msg==false)
+	{
+		check_connection();
+	}
+
+	//read the new messages to come
+	process_input();
+	switch (pc_packet.mode)	
+	{
+		case PANIC_MODE:
+			statefunc=panic_mode;
+			break;
+		case MANUAL_MODE:
+			cur_lift=pc_packet.lift;
+			cur_pitch=pc_packet.pitch;
+			cur_roll=pc_packet.roll;
+			cur_yaw=pc_packet.yaw;
+			break;
+		default:
+			break;
+	}
+}
+
+//panic mode state makis
+void panic_mode()
+{
+	cur_mode=PANIC_MODE;
+
+	//indicate that you are in panic mode
+	nrf_gpio_pin_write(RED,0);
+	nrf_gpio_pin_write(YELLOW,0);
+	
+	//fly at minimum rpm
+	if(ae[0]>175 || ae[1]>175 || ae[2]>175 || ae[3]>175) 
+	{
+		ae[0]=175;
+		ae[1]=175;
+		ae[2]=175;
+		ae[3]=175;
+		run_filters_and_control();
+	}
+
+	//zero down some values
+	cur_lift=0;
+	cur_pitch=0;
+	cur_roll=0;
+	cur_yaw=0;
+	old_lift=0;
+	old_pitch=0;
+	old_roll=0;
+	old_yaw=0;
+	
+	//print your changed state
+	printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+
+	//after 2 seconds get to safe mode
+	nrf_delay_ms(2000);
+
+	//fixes a bug, doesn't care to check connection going to safe mode anyway
+	time_latest_packet=get_time_us();
+
+	//flag to print once in safe mode
+	safe_print=true;
+
+	//enters safe mode
+	statefunc=safe_mode;
+}
+
+//safe mode state makis 
+void safe_mode()
+{
+	cur_mode=SAFE_MODE;	
+
+	//indicate that you are in safe mode	
+	nrf_gpio_pin_write(RED,0);
+	nrf_gpio_pin_write(YELLOW,1);
+	nrf_gpio_pin_write(GREEN,1);
+
+	//motors are shut down
+	ae[0]=0;
+	ae[1]=0;
+	ae[2]=0;
+	ae[3]=0;
+	run_filters_and_control();
+	if(safe_print==true)
+	{
+		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+		safe_print=false;
+	}
+
+	//while no message is received wait here and check your connection
+	while(msg==false)
+	{
+		check_connection();
+	}
+	
+	//if there is battery and the connection is ok read the messages
+	if(battery==true && connection==true)
+	{
+		process_input();
+		switch (pc_packet.mode)
+		{
+			//check for not switching to manual mode with offsets different than zero
+			case MANUAL_MODE:
+				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
+				{
+					//print your changed state
+					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+					statefunc=manual_mode;
+				}
+				break;
+			case CALIBRATION_MODE:
+				p_off=0;
+				q_off=0;
+				r_off=0;
+				statefunc=calibration_mode;
+				break;
+			default:
+				break;
+		}
+	}
 }
 
 /*jmi*/
@@ -216,202 +360,55 @@ void process_input()
 	//temporary package before checksum validation
 	packet tp; 
 	char c;
-	/*skip through all input untill header is found*/
-	while ( (c = dequeue(&rx_queue) ) != HEADER_VALUE) {
-	}
-	tp.header = c;
-	tp.mode = dequeue(&rx_queue);		
-	tp.p_adjust = dequeue(&rx_queue);
-	tp.lift = dequeue(&rx_queue);
-	tp.pitch = dequeue(&rx_queue);
-	tp.roll = dequeue(&rx_queue);
-	tp.yaw = dequeue(&rx_queue);
-	tp.checksum = dequeue(&rx_queue);
-	//if checksum is correct,copy whole packet into global packet	
-	if (tp.checksum == (get_checksum(tp) & 0x7F)) {
-		pc_packet.mode = tp.mode;
-		pc_packet.p_adjust = tp.p_adjust;
-		pc_packet.lift = tp.lift;
-		pc_packet.pitch = tp.pitch;
-		pc_packet.roll = tp.roll;
-		pc_packet.yaw = tp.yaw;
-		pc_packet.checksum = tp.checksum;
-		time_latest_packet = get_time_us();
-		printf("time_latest_packet = %ld\n",time_latest_packet);
-		//printf("%d - %d - %d - %d\n",pc_packet.roll,pc_packet.pitch,pc_packet.yaw,pc_packet.lift);
-		//nrf_delay_ms(50);
-	}
-
-	//printf("head:%x, mod:%x,padjust:%x,lift:%x,pitch:%x,roll:%x,yaw:%x,check:%x\n" ,pc_packet.header,pc_packet.mode,pc_packet.p_adjust,pc_packet.lift,pc_packet.pitch,pc_packet.roll,pc_packet.yaw,pc_packet.checksum);
-	//nrf_delay_ms(100);
-
-	/*flush rest of queue*/
-	while (rx_queue.count >= 1) {
-		dequeue(&rx_queue);
-	}
-
-}
-
-//calibration mode state makis
-void calibration_mode()
-{
-	cur_mode=CALIBRATION_MODE;
-	
-	nrf_gpio_pin_write(RED,1);
-	nrf_gpio_pin_write(GREEN,0);
-	int clb;
-	clb=0;
-	while(clb<200)
+	if(rx_queue.count>0)
 	{
-		if (check_sensor_int_flag())
-		{
-			get_dmp_data();
-			clear_sensor_int_flag();
-			clb++;
-			p_off=p_off+sp;
-			q_off=q_off+sq;
-			r_off=r_off+sq;	
-		}	
-	}
-	p_off=p_off/200;
-	q_off=q_off/200;
-	r_off=r_off/200;
+		/*skip through all input untill header is found*/
+		while ( (c = dequeue(&rx_queue) ) != HEADER_VALUE) {
+		}
+		tp.header = c;
+		tp.mode = dequeue(&rx_queue);		
+		tp.p_adjust = dequeue(&rx_queue);
+		tp.lift = dequeue(&rx_queue);
+		tp.pitch = dequeue(&rx_queue);
+		tp.roll = dequeue(&rx_queue);
+		tp.yaw = dequeue(&rx_queue);
+		tp.checksum = dequeue(&rx_queue);
+		//if checksum is correct,copy whole packet into global packet	
+		if (tp.checksum == (get_checksum(tp) & 0x7F)) {
+			pc_packet.mode = tp.mode;
+			pc_packet.p_adjust = tp.p_adjust;
+			pc_packet.lift = tp.lift;
+			pc_packet.pitch = tp.pitch;
+			pc_packet.roll = tp.roll;
+			pc_packet.yaw = tp.yaw;
+			pc_packet.checksum = tp.checksum;
+			time_latest_packet = get_time_us();
+			msg=false;
+			//printf("time_latest_packet = %ld, received packets=%d\n",time_latest_packet,rx);
+			//printf("%d - %d - %d - %d\n",pc_packet.roll,pc_packet.pitch,pc_packet.yaw,pc_packet.lift);
+		}
 
-	process_input();
-	switch (pc_packet.mode)	
-	{
-		case SAFE_MODE:
-			//printf("%d, %d, %d\n",p_off,q_off,r_off);
-			//nrf_delay_ms(300);
-			statefunc=safe_mode;
-			break;
-		default:
-			break;
+		//printf("head:%x, mod:%x,padjust:%x,lift:%x,pitch:%x,roll:%x,yaw:%x,check:%x\n" ,pc_packet.header,pc_packet.mode,pc_packet.p_adjust,pc_packet.lift,pc_packet.pitch,pc_packet.roll,pc_packet.yaw,pc_packet.checksum);
+		//nrf_delay_ms(100);
+
+		/*flush rest of queue*/
+		while (rx_queue.count >= 1) {
+			dequeue(&rx_queue);
+		}
 	}
 }
 
-
-//manual mode state makis
-void manual_mode()
-{
-	cur_mode=MANUAL_MODE;
-
-	nrf_gpio_pin_write(RED,1);
-	nrf_gpio_pin_write(YELLOW,0);
-
-	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
-	{
-		lift_force=calculate_Z(cur_lift);
-		roll_moment=calculate_L(cur_roll);
-		pitch_moment=calculate_M(cur_pitch);
-		yaw_moment=calculate_N(cur_yaw);
-		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
-		old_lift=cur_lift;
-		old_roll=cur_roll;
-		old_pitch=cur_pitch;
-		old_yaw=cur_yaw;
-		//run_filters_and_control();
-	}	
-	
-	process_input();
-	switch (pc_packet.mode)	
-	{
-		case PANIC_MODE:
-			statefunc=panic_mode;
-			break;
-		case MANUAL_MODE:
-			cur_lift=pc_packet.lift;
-			cur_pitch=pc_packet.pitch;
-			cur_roll=pc_packet.roll;
-			cur_yaw=pc_packet.yaw;
-			break;
-
-		default:
-			break;
-	}
-}
-
-//panic mode state makis
-void panic_mode()
-{
-	cur_mode=PANIC_MODE;
-
-	nrf_gpio_pin_write(RED,0);
-	nrf_gpio_pin_write(YELLOW,0);
-
-	ae[0]=50;
-	ae[1]=50;
-	ae[2]=50;
-	ae[3]=50;
-	run_filters_and_control();
-
-	cur_lift=0;
-	cur_pitch=0;
-	cur_roll=0;
-	cur_yaw=0;
-
-	old_lift=0;
-	old_pitch=0;
-	old_roll=0;
-	old_yaw=0;
-
-	nrf_delay_ms(1000);
-
-	ae[0]=0;
-	ae[1]=0;
-	ae[2]=0;
-	ae[3]=0;
-	run_filters_and_control();
-	while(1)
-	{
-		printf("panic mode");		
-		nrf_delay_ms(1000);
-	}
-}
-
-//safe mode state makis 
-void safe_mode()
-{
-	cur_mode=SAFE_MODE;
-		
-	nrf_gpio_pin_write(RED,0);
-	nrf_gpio_pin_write(YELLOW,1);
-	nrf_gpio_pin_write(GREEN,1);
-
-	ae[0]=0;
-	ae[1]=0;
-	ae[2]=0;
-	ae[3]=0;
-	run_filters_and_control();
-
-	process_input();
-	switch (pc_packet.mode)
-	{
-		case MANUAL_MODE:
-			cur_lift=pc_packet.lift;
-			cur_pitch=pc_packet.pitch;
-			cur_roll=pc_packet.roll;
-			cur_yaw=pc_packet.yaw;
-			statefunc=manual_mode;
-			break;
-		case CALIBRATION_MODE:
-			p_off=0;
-			q_off=0;
-			r_off=0;
-			statefunc=calibration_mode;
-			break;
-		default:
-			break;
-	}
-}
 
 void initialize()
 {
+	//message flag initialization
+	msg=false;
+	
+	//drone modules initialization
 	uart_init();
 	gpio_init();
 	timers_init();
 	adc_init();
-	
 	twi_init();
 	imu_init(true, 100);	
 	baro_init();
@@ -419,46 +416,47 @@ void initialize()
 	//ble_init();
 	demo_done = false;
 	adc_request_sample();
-	/*makis init*/ 
+
+	//initialise the pc_packet struct to safe values, just in case
 	pc_packet.mode = SAFE_MODE;
 	pc_packet.lift = 0;
 	pc_packet.pitch = 0;
 	pc_packet.roll = 0;
 	pc_packet.yaw = 0;	
-
+	
+	//initialise rest of the variables to safe values, just in case
 	cur_mode=SAFE_MODE;
 	cur_lift=0;
 	cur_pitch=0;
 	cur_roll=0;
-	cur_yaw=0;
-	
+	cur_yaw=0;	
 	old_lift=0;
 	old_pitch=0;
 	old_roll=0;
 	old_yaw=0;
-
-	cnt=0;
-
+	lift_force=0;
+	roll_moment=0;
+	pitch_moment=0;
+	yaw_moment=0;
 	ae[0]=0;
 	ae[1]=0;
 	ae[2]=0;
 	ae[3]=0;
-
-	//later create a function for start_z
-	start_z=ae[0]*ae[0]+ae[1]*ae[1]+ae[2]*ae[2]+ae[3]*ae[3];
+	battery=true;
+	connection=true;
+	safe_print=true;
+	//first get to safe mode
+	statefunc= safe_mode;
 }
-//if nothing received for over 400ms approximately go to panic mode and exit, makis
+
+//if nothing received for over 500ms approximately go to panic mode and exit
 void check_connection()
 {
 	current_time=get_time_us();
-	if((current_time-time_latest_packet) > 400000)
+	if((current_time-time_latest_packet) > 500000)
 	{	
+		connection=false;
 		statefunc=panic_mode;
-		pc_packet.mode = SAFE_MODE;
-		pc_packet.lift = 0;
-		pc_packet.pitch = 0;
-		pc_packet.roll = 0;
-		pc_packet.yaw = 0;
 	}
 }
 
@@ -471,32 +469,30 @@ void check_connection()
 
 int main(void)
 {
+	//initialize the drone
 	initialize();
-	time_latest_packet = get_time_us();
-	current_time = get_time_us();
-	nrf_delay_ms(15);
+
 	while (!demo_done)
 	{		
+		
+		//get to the state
 		(*statefunc)();
-		check_connection();
-		printf("current_time= %ld, packet_time=%ld, dif = %ld\n", current_time , time_latest_packet, current_time-time_latest_packet);
-		nrf_delay_ms(15);
 
-		//check battery voltage every now and then	
+		//check battery voltage	
 		if (check_timer_flag()) 
 		{
 			clear_timer_flag();
+			//printf("current mode= %d, motor0=%d, motor1=%d, motor2=%d, motor3=%d, battery=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
 			adc_request_sample();
-			//printf("bat voltage %d below threshold %d \n",bat_volt, BAT_THRESHOLD);
+	
 			//if (bat_volt < 1050)
 			//{
 				//printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
-				//nrf_delay_ms(1000);
+				//battery=false;
 				//statefunc=panic_mode;
 			//}			
 	
 		}
-		
 	}	
 	
 	printf("\n\t Goodbye \n\n");
