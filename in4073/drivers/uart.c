@@ -9,6 +9,7 @@
  */
 
 #include "in4073.h"
+#include "states.h"
 
 bool txd_available = true;
 
@@ -36,12 +37,17 @@ int _write(int file, const char * p_char, int len)
 }
 
 
+
 void UART0_IRQHandler(void)
 {
 	if (NRF_UART0->EVENTS_RXDRDY != 0)
     	{
 		NRF_UART0->EVENTS_RXDRDY  = 0;
 		enqueue( &rx_queue, NRF_UART0->RXD);
+		if(rx_queue.count>=8)
+		{
+			msg=true;
+		}
 	}
     
     	if (NRF_UART0->EVENTS_TXDRDY != 0)
