@@ -199,6 +199,76 @@ void calibration_mode()
 }
 
 
+void yaw_control_mode()
+{
+
+	cur_mode=YAW_CONTROLLED_MODE;
+
+	nrf_gpio_pin_write(RED,0);
+	nrf_gpio_pin_write(YELLOW,1);
+	nrf_gpio_pin_write(GREEN,0);
+
+	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
+	{
+		lift_force=calculate_Z(cur_lift);
+		roll_moment=calculate_L(cur_roll);
+		pitch_moment=calculate_M(cur_pitch);
+		yaw_moment=calculate_N(cur_yaw);
+		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
+		old_lift=cur_lift;
+		old_roll=cur_roll;
+		old_pitch=cur_pitch;
+		old_yaw=cur_yaw;
+		run_filters_and_control();
+		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+	}	
+	
+
+	while(msg==false && connection==true)
+	{
+		check_connection();
+		if (check_sensor_int_flag())
+		{
+			get_dmp_data();				
+			clear_sensor_int_flag();
+			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*32)*p_ctrl);
+			//printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+		}
+	}
+	
+	process_input();
+	switch (pc_packet.mode)	
+	{
+		case PANIC_MODE:
+			statefunc=panic_mode;
+			break;
+		case YAW_CONTROLLED_MODE:
+			cur_lift=pc_packet.lift;
+			cur_pitch=pc_packet.pitch;
+			cur_roll=pc_packet.roll;
+			cur_yaw=pc_packet.yaw;
+			if(pc_packet.p_adjust==1)
+			{
+				p_ctrl=p_ctrl+1;
+			}
+			if(pc_packet.p_adjust==2)
+			{
+				p_ctrl=p_ctrl-1;
+				if(p_ctrl<=1)
+				{
+					p_ctrl=1;
+				}
+			}
+		default:
+			break;
+	}
+
+
+	
+
+}
+
+
 //manual mode state makis
 void manual_mode()
 {
@@ -225,7 +295,7 @@ void manual_mode()
 	}	
 
 	//while there is no message received wait here and check your connection	
-	while(msg==false)
+	while(msg==false && connection==true)
 	{
 		check_connection();
 	}
@@ -284,7 +354,7 @@ void panic_mode()
 	nrf_delay_ms(2000);
 
 	//fixes a bug, doesn't care to check connection going to safe mode anyway
-	time_latest_packet=get_time_us();
+	time_latest_packet_us=get_time_us();
 
 	//flag to print once in safe mode
 	safe_print=true;
@@ -316,8 +386,9 @@ void safe_mode()
 	}
 
 	//while no message is received wait here and check your connection
-	while(msg==false)
+	while(msg==false && connection==true)
 	{
+		
 		check_connection();
 	}
 	
@@ -332,7 +403,7 @@ void safe_mode()
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
 					//print your changed state
-					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",MANUAL_MODE,ae[0],ae[1],ae[2],ae[3],bat_volt);
 					statefunc=manual_mode;
 				}
 				break;
@@ -341,6 +412,14 @@ void safe_mode()
 				q_off=0;
 				r_off=0;
 				statefunc=calibration_mode;
+				break;
+			case YAW_CONTROLLED_MODE:
+				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
+				{
+					//print your changed state
+					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",YAW_CONTROLLED_MODE,ae[0],ae[1],ae[2],ae[3],bat_volt);
+					statefunc=yaw_control_mode;
+				}
 				break;
 			default:
 				break;
@@ -382,14 +461,10 @@ void process_input()
 			pc_packet.roll = tp.roll;
 			pc_packet.yaw = tp.yaw;
 			pc_packet.checksum = tp.checksum;
-			time_latest_packet = get_time_us();
+			time_latest_packet_us = get_time_us();
 			msg=false;
-			//printf("time_latest_packet = %ld, received packets=%d\n",time_latest_packet,rx);
-			//printf("%d - %d - %d - %d\n",pc_packet.roll,pc_packet.pitch,pc_packet.yaw,pc_packet.lift);
-		}
 
-		//printf("head:%x, mod:%x,padjust:%x,lift:%x,pitch:%x,roll:%x,yaw:%x,check:%x\n" ,pc_packet.header,pc_packet.mode,pc_packet.p_adjust,pc_packet.lift,pc_packet.pitch,pc_packet.roll,pc_packet.yaw,pc_packet.checksum);
-		//nrf_delay_ms(100);
+		}
 
 		/*flush rest of queue*/
 		while (rx_queue.count >= 1) {
@@ -445,6 +520,7 @@ void initialize()
 	battery=true;
 	connection=true;
 	safe_print=true;
+	p_ctrl=10;
 	//first get to safe mode
 	statefunc= safe_mode;
 }
@@ -452,8 +528,9 @@ void initialize()
 //if nothing received for over 500ms approximately go to panic mode and exit
 void check_connection()
 {
-	current_time=get_time_us();
-	if((current_time-time_latest_packet) > 500000)
+	current_time_us=get_time_us();
+	uint32_t diff = current_time_us - time_latest_packet_us;
+	if(diff > 500000)
 	{	
 		connection=false;
 		statefunc=panic_mode;
@@ -471,7 +548,7 @@ int main(void)
 {
 	//initialize the drone
 	initialize();
-
+	
 	while (!demo_done)
 	{		
 		
@@ -482,15 +559,14 @@ int main(void)
 		if (check_timer_flag()) 
 		{
 			clear_timer_flag();
-			//printf("current mode= %d, motor0=%d, motor1=%d, motor2=%d, motor3=%d, battery=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
 			adc_request_sample();
 	
-			//if (bat_volt < 1050)
-			//{
-				//printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
-				//battery=false;
-				//statefunc=panic_mode;
-			//}			
+			if (bat_volt < 1050)
+			{
+				printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
+				battery=false;
+				statefunc=panic_mode;
+			}		
 	
 		}
 	}	

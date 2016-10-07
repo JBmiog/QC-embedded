@@ -18,7 +18,8 @@ char js_pitch;
 char js_roll;
 char js_lift;
 
-char yaw_offset_p;
+char yaw_offset_p_up;
+char yaw_offset_p_down;
 char roll_pitch_offset_p1;
 char roll_pitch_offset_p2;
 

@@ -423,10 +423,10 @@ void kb_input_handler(char pressed_key)
         break;
     //control loop values adjusting
     case 'u':
-        yaw_offset_p = UP;
+       	yaw_offset_p_up=0x01;
         break;
     case 'j':
-        yaw_offset_p = DOWN;
+        yaw_offset_p_down=0x02;
         break;
     case 'i':
         roll_pitch_offset_p1 = UP;
@@ -490,7 +490,7 @@ void kb_input_handler(char pressed_key)
 /* jmi */
 void print_static_offsets()
 {
-    printf("PC SIDE: mode=%d, kb_yaw=%d, js_yaw=%d, kb_pitch=%d, js_pitch=%d, kb_roll=%d, js_roll=%d, kb_lift=%d, js_lift=%d, p=%d, P1=%d, P2=%d\n",mode, yaw_offset, js_yaw, pitch_offset, js_pitch, roll_offset, js_roll, lift_offset, js_lift, yaw_offset_p, roll_pitch_offset_p1, roll_pitch_offset_p2);
+    printf("PC SIDE: mode=%d, kb_yaw=%d, js_yaw=%d, kb_pitch=%d, js_pitch=%d, kb_roll=%d, js_roll=%d, kb_lift=%d, js_lift=%d, p=%d, P1=%d, P2=%d\n",mode, yaw_offset, js_yaw, pitch_offset, js_pitch, roll_offset, js_roll, lift_offset, js_lift, yaw_offset_p_up|yaw_offset_p_down, roll_pitch_offset_p1, roll_pitch_offset_p2);
 }
 
 /*jmi*/
@@ -551,7 +551,7 @@ void create_packet()
 {
     mypacket.header = HEADER_VALUE;
     mypacket.mode = mode;
-    //mypacket.p_adjust =
+    mypacket.p_adjust = yaw_offset_p_up | yaw_offset_p_down;
     /*here i need the joystick...?*/
     mypacket.lift = inspect_overflow_1(lift_offset, js_lift, kb_lift);
     mypacket.pitch = inspect_overflow(pitch_offset, js_pitch, kb_pitch);
@@ -573,6 +573,10 @@ void tx_packet()
     rs232_putchar(mypacket.roll);
     rs232_putchar(mypacket.yaw);
     rs232_putchar(mypacket.checksum);
+   	//reseting p_adjust values
+   	yaw_offset_p_up=0;
+    yaw_offset_p_down=0;
+						
 }
 
 /*----------------------------------------------------------------
