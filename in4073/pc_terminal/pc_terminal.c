@@ -73,7 +73,7 @@ void mon_delay_ms(unsigned int ms)
 
 void set_js_packet(char direction, int axis, int divisor)
 {
-    float throttle_on_scale = 0, multiplier = 127;
+    float throttle_on_scale = 0, multiplier = 63;
     char send_value;
 
     throttle_on_scale = (axis + (divisor / 2)) / divisor;
@@ -121,9 +121,25 @@ int read_js(int fd)
         exit(1);
     }
 
-    //exit program
+    //mode switch
     if (button[0])
-        return 1;
+        mode = PANIC_MODE;
+    if (button[1])
+        mode = SAFE_MODE;
+    if (button[2])
+        mode = MANUAL_MODE;
+    if (button[3])
+        mode = CALIBRATION_MODE;
+    if (button[4])
+        mode = YAW_CONTROLLED_MODE;
+    if (button[5])
+        mode = FULL_CONTROL_MODE;
+    if (button[6])
+        mode = RAW_MODE;
+    if (button[7])
+        mode = HEIGHT_CONTROL_MODE;
+    if (button[8])
+        mode = WIRELESS_MODE;
 
     //roll
     if(axis[0] < -JS_MIN_VALUE || axis[0] > JS_MIN_VALUE)
@@ -356,7 +372,6 @@ void kb_input_handler(char pressed_key)
         break;
     case ZERO:
         mode = SAFE_MODE;
-        term_puts("changed mode to safe mode\n");
         break;
     case ONE:
         mode = PANIC_MODE;
@@ -383,41 +398,25 @@ void kb_input_handler(char pressed_key)
         mode = WIRELESS_MODE;
         break;
     case 'a':
-        if((lift_offset+UP)>=126 || lift_offset==127 )
-        {
-            lift_offset=127;
-        }
-        else
+        if(lift_offset!=63)
         {
             lift_offset+=UP;
         }
         break;
     case 'z':
-        if((lift_offset<-120) && (lift_offset+DOWN>0))
-        {
-            lift_offset=-127;
-        }
-        else
+        if(lift_offset!=-63)
         {
             lift_offset+=DOWN;
         }
         break;
     case 'q':
-        if((yaw_offset<-120) && (yaw_offset+DOWN>0))
-        {
-            yaw_offset=-127;
-        }
-        else
+        if(yaw_offset!=-63)
         {
             yaw_offset+=DOWN;
         }
         break;
     case 'w':
-        if((yaw_offset+UP)>=126 || yaw_offset==127 )
-        {
-            yaw_offset=127;
-        }
-        else
+        if(yaw_offset!=63)
         {
             yaw_offset+=UP;
         }
@@ -443,49 +442,32 @@ void kb_input_handler(char pressed_key)
         break;
     //arrow up
     case 'A':
-        if((pitch_offset<-120) && (pitch_offset+DOWN>0))
-        {
-            pitch_offset=-127;
-        }
-        else
+        if(pitch_offset!=-63)
         {
             pitch_offset+=DOWN;
         }
         break;
     //arrow down
     case 'B':
-        if((pitch_offset+UP)>=126 || pitch_offset==127 )
-        {
-            pitch_offset=127;
-        }
-        else
+        if(pitch_offset!=63)
         {
             pitch_offset+=UP;
         }
         break;
     //arrow right
     case 'C':
-        if((roll_offset<-120) && (roll_offset+DOWN>0))
-        {
-            roll_offset=-127;
-        }
-        else
+        if(roll_offset!=-63)
         {
             roll_offset+=DOWN;
         }
         break;
     //arrow left
     case 'D':
-        if((roll_offset+UP)>=126 || roll_offset==127 )
-        {
-            roll_offset=127;
-        }
-        else
+        if(roll_offset!=63)
         {
             roll_offset+=UP;
         }
         break;
-
     //own implementation
     case 't':
         kb_pitch = UP;
@@ -503,20 +485,12 @@ void kb_input_handler(char pressed_key)
         return;
         break;
     }
-
-
 }
 
 /* jmi */
 void print_static_offsets()
 {
-    printf("mode = %d\t y_offset = %d\t p_offset = %d\t, r_offset = %d\t, l_offset = %d\t p = %d\t P1 = %d\t, P2 = %d\n",mode, yaw_offset, pitch_offset, roll_offset, lift_offset, yaw_offset_p, roll_pitch_offset_p1, roll_pitch_offset_p2);
-}
-
-void print_packet()
-{
-    printf("lift=%d, pitch=%d, roll=%d, yaw=%d \n",mypacket.lift,mypacket.pitch,mypacket.roll,mypacket.yaw);
-
+    printf("PC SIDE: mode=%d, kb_yaw=%d, js_yaw=%d, kb_pitch=%d, js_pitch=%d, kb_roll=%d, js_roll=%d, kb_lift=%d, js_lift=%d, p=%d, P1=%d, P2=%d\n",mode, yaw_offset, js_yaw, pitch_offset, js_pitch, roll_offset, js_roll, lift_offset, js_lift, yaw_offset_p, roll_pitch_offset_p1, roll_pitch_offset_p2);
 }
 
 /*jmi*/
@@ -531,22 +505,42 @@ char inspect_overflow(char offset, char js, char kb)
 
     char temp_sum;
 
-    if ((offset + js + kb) > 127)
+    if ((offset + js + kb) > 63)
     {
-        temp_sum = ((127)>>1) & 0x7F;;
+        temp_sum = 63 & 0x7F;;
     }
-    else if ((offset + js + kb) < -127)
+    else if ((offset + js + kb) < -63)
     {
-        temp_sum = ((-127)>>1) & 0x7F;
+        temp_sum = -63 & 0x7F;
     }
     else
     {
-        temp_sum = ((offset + js + kb)>>1) & 0x7F;
+        temp_sum = (offset + js + kb) & 0x7F;
     }
 
     return temp_sum;
 }
 
+char inspect_overflow_1(char offset, char js, char kb)
+{
+
+    char temp_sum;
+
+    if ((offset + js + kb) > 63)
+    {
+        temp_sum = 63 & 0x7F;;
+    }
+    else if ((offset + js + kb) < 0)
+    {
+        temp_sum = 0 & 0x7F;
+    }
+    else
+    {
+        temp_sum = (offset + js + kb) & 0x7F;
+    }
+
+    return temp_sum;
+}
 
 
 /* jmi
@@ -559,7 +553,7 @@ void create_packet()
     mypacket.mode = mode;
     //mypacket.p_adjust =
     /*here i need the joystick...?*/
-    mypacket.lift = inspect_overflow(lift_offset, js_lift, kb_lift);
+    mypacket.lift = inspect_overflow_1(lift_offset, js_lift, kb_lift);
     mypacket.pitch = inspect_overflow(pitch_offset, js_pitch, kb_pitch);
     mypacket.roll = inspect_overflow(roll_offset, js_roll, kb_roll);
     mypacket.yaw = inspect_overflow(yaw_offset, js_yaw, kb_yaw);
@@ -586,6 +580,8 @@ void tx_packet()
  * edited by jmi
  *----------------------------------------------------------------
  */
+
+
 int main(int argc, char **argv)
 {
     char	c;
@@ -607,58 +603,37 @@ int main(int argc, char **argv)
 
 
     joystick_init();
-	struct timespec ts;
-	timespec_get(&ts, TIME_UTC);
-	struct timespec {
-		time_t tv_sec;
-		long long tv_nsec;
-	};
-	
-	long long old_time, current_time;
-	
-	old_time = (ts.tv_nsec/NANO_SECOND_MULTIPLIER);
+    
+	unsigned int old_time, current_time;
+	old_time = mon_time_ms();
 
     while(1)
     {
-		
-		timespec_get(&ts, TIME_UTC);
-		current_time = (ts.tv_nsec/NANO_SECOND_MULTIPLIER);
-		if((current_time - old_time) > 70){
-	        create_packet();
-			tx_packet();
-			//printf("time elapsed = %lld\n",current_time-old_time);
-		}
-		old_time = current_time;
-        read_js(fd);
+	
+	//read messages from the board 
+        if ((c = rs232_getchar_nb()) != -1)
+        {
+             term_putchar(c);
+        }
 
+	//construct message to the board	
+	read_js(fd);
         while ((c = term_getchar_nb()) != -1)
         {
             kb_input_handler(c);
-            term_putchar('>');
-            term_putchar(c);
-            term_putchar('\n');
-            print_static_offsets();
-            //rs232_putchar(pressed_key);
+	    print_static_offsets();
         }
 
-        /*read until return is given*/
-        if((c = rs232_getchar_nb()) != -1)
-        {
-            term_putchar('<');
-            term_putchar(c);
-            while ((c = rs232_getchar_nb()) != '\n')
-            {
-                term_putchar(c);
-            }
-            	term_putchar('\n');
-
-            while ((c = rs232_getchar_nb()) != -1)
-            {
-                term_putchar(c);
-            }
-
-        }
-    }
+     
+	//send messages to the board
+	current_time=mon_time_ms();	
+	if((current_time - old_time) > 100)
+	{
+        	create_packet();
+		tx_packet();
+		old_time=current_time;
+	}
+     }
 
     term_exitio();
     rs232_close();
@@ -666,4 +641,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-
