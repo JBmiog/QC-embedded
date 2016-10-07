@@ -332,7 +332,7 @@ void safe_mode()
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
 					//print your changed state
-					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",MANUAL_MODE,ae[0],ae[1],ae[2],ae[3],bat_volt);
 					statefunc=manual_mode;
 				}
 				break;
