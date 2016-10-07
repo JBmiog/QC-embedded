@@ -36,5 +36,6 @@ typedef struct {
 	char checksum;
 } packet;
 
+packet pc_packet;
 
 #endif
