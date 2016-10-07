@@ -284,7 +284,7 @@ void panic_mode()
 	nrf_delay_ms(2000);
 
 	//fixes a bug, doesn't care to check connection going to safe mode anyway
-	time_latest_packet=get_time_us();
+	time_latest_packet_us=get_time_us();
 
 	//flag to print once in safe mode
 	safe_print=true;
@@ -316,8 +316,9 @@ void safe_mode()
 	}
 
 	//while no message is received wait here and check your connection
-	while(msg==false)
+	while(msg==false && connection==true)
 	{
+		
 		check_connection();
 	}
 	
@@ -382,14 +383,10 @@ void process_input()
 			pc_packet.roll = tp.roll;
 			pc_packet.yaw = tp.yaw;
 			pc_packet.checksum = tp.checksum;
-			time_latest_packet = get_time_us();
+			time_latest_packet_us = get_time_us();
 			msg=false;
-			//printf("time_latest_packet = %ld, received packets=%d\n",time_latest_packet,rx);
-			//printf("%d - %d - %d - %d\n",pc_packet.roll,pc_packet.pitch,pc_packet.yaw,pc_packet.lift);
-		}
 
-		//printf("head:%x, mod:%x,padjust:%x,lift:%x,pitch:%x,roll:%x,yaw:%x,check:%x\n" ,pc_packet.header,pc_packet.mode,pc_packet.p_adjust,pc_packet.lift,pc_packet.pitch,pc_packet.roll,pc_packet.yaw,pc_packet.checksum);
-		//nrf_delay_ms(100);
+		}
 
 		/*flush rest of queue*/
 		while (rx_queue.count >= 1) {
@@ -452,8 +449,11 @@ void initialize()
 //if nothing received for over 500ms approximately go to panic mode and exit
 void check_connection()
 {
-	current_time=get_time_us();
-	if((current_time-time_latest_packet) > 500000)
+	current_time_us=get_time_us();
+	uint32_t diff = current_time_us - time_latest_packet_us;
+	//printf("current time = %ld, last_packet_time = %ld diff = %ld \n", current_time_us, time_latest_packet_us, diff);
+	nrf_delay_ms(10);
+	if(diff > 500000)
 	{	
 		connection=false;
 		statefunc=panic_mode;

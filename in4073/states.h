@@ -42,7 +42,7 @@ int16_t q_off;
 int16_t r_off;
 
 //counters to take care of exiting when communication breaks down
-uint32_t time_latest_packet, current_time;
+uint32_t time_latest_packet_us, current_time_us;
 
 //flags indicating that there is still connection and battery
 bool connection;
