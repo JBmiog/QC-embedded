@@ -13,6 +13,8 @@
 #define RAW_MODE                0x06
 #define HEIGHT_CONTROL_MODE     0x07
 #define WIRELESS_MODE           0x08
+#define DUMP_FLASH_MODE			0X09
+#define SHUTDOWN_MODE			0X10
 
 #define p_up					0x01
 #define p_down					0x02

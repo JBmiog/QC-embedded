@@ -362,7 +362,7 @@ int rs232_putchar(char c)
     return result;
 }
 
-/* handles the input of the keyboard, Jeffrey Miog */
+/* handles the input of the keyboard, Jeffrey Miog = jmi */
 void kb_input_handler(char pressed_key)
 {
     switch(pressed_key)
@@ -397,6 +397,12 @@ void kb_input_handler(char pressed_key)
     case EIGHT:
         mode = WIRELESS_MODE;
         break;
+	case NINE:
+		mode = DUMP_FLASH_MODE;
+		break;
+	case MINUS_SYMBOL:
+		mode = SHUTDOWN_MODE;
+		break;
     case 'a':
         if(lift_offset!=63)
         {
@@ -544,7 +550,7 @@ char inspect_overflow_1(char offset, char js, char kb)
 
 
 /* jmi
-the &0x7F is for savety only, so we know MSB is only set in the
+the &0x7F is for safety only, so we know MSB is only set in the
 header
 */
 void create_packet()
@@ -552,7 +558,6 @@ void create_packet()
     mypacket.header = HEADER_VALUE;
     mypacket.mode = mode;
     mypacket.p_adjust = yaw_offset_p_up | yaw_offset_p_down;
-    /*here i need the joystick...?*/
     mypacket.lift = inspect_overflow_1(lift_offset, js_lift, kb_lift);
     mypacket.pitch = inspect_overflow(pitch_offset, js_pitch, kb_pitch);
     mypacket.roll = inspect_overflow(roll_offset, js_roll, kb_roll);
@@ -576,16 +581,17 @@ void tx_packet()
    	//reseting p_adjust values
    	yaw_offset_p_up=0;
     yaw_offset_p_down=0;
-						
+
+	//reset mode after we did a flash dump	
+	if(mode == DUMP_FLASH_MODE){
+		mode = SAFE_MODE;
+	}					
 }
 
 /*----------------------------------------------------------------
- * main -- execute terminal
- * edited by jmi
+ * main -- jmi
  *----------------------------------------------------------------
  */
-
-
 int main(int argc, char **argv)
 {
     char	c;
@@ -605,7 +611,6 @@ int main(int argc, char **argv)
 
     term_puts("\nType ^C to exit\n");
 
-
     joystick_init();
     
 	unsigned int old_time, current_time;
@@ -614,29 +619,29 @@ int main(int argc, char **argv)
     while(1)
     {
 	
-	//read messages from the board 
+		//read messages from the board 
         if ((c = rs232_getchar_nb()) != -1)
         {
              term_putchar(c);
         }
 
-	//construct message to the board	
-	read_js(fd);
-        while ((c = term_getchar_nb()) != -1)
+		read_js(fd);
+ 
+		while ((c = term_getchar_nb()) != -1)
         {
             kb_input_handler(c);
-	    print_static_offsets();
+		    print_static_offsets();
         }
 
      
-	//send messages to the board
-	current_time=mon_time_ms();	
-	if((current_time - old_time) > 100)
-	{
-        	create_packet();
-		tx_packet();
-		old_time=current_time;
-	}
+		//send messages to the board
+		current_time=mon_time_ms();	
+		if((current_time - old_time) > 100)
+		{
+	    	create_packet();
+			tx_packet();
+			old_time=current_time;
+		}
      }
 
     term_exitio();

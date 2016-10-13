@@ -30,6 +30,8 @@
 #define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
 #define fixed_point_to_int(a) (int)(a>>8)
 
+bool decoupled_from_drone = true;
+
 //calculate the Z force requested makis
 int calculate_Z(char lift)
 {
@@ -316,6 +318,8 @@ void manual_mode()
 			cur_roll=pc_packet.roll;
 			cur_yaw=pc_packet.yaw;
 			break;
+		case SAFE_MODE:
+			statefunc=safe_mode;
 		default:
 			break;
 	}
@@ -415,6 +419,14 @@ void safe_mode()
 				{
 					statefunc=yaw_control_mode;
 				}
+				break;
+			case DUMP_FLASH_MODE:
+				read_flight_data();
+				break;
+			case SHUTDOWN_MODE:
+				printf("\n\t Goodbye \n\n");
+				nrf_delay_ms(100);
+				NVIC_SystemReset();
 				break;
 			default:
 				break;
@@ -547,6 +559,10 @@ void print_to_pc(){
 
 //jmi
 void battery_check(){
+	//for testing purpose, the bat is not connected.
+	if(decoupled_from_drone) {
+		return; 
+	}
 	adc_request_sample();
 	
 	if (bat_volt < 1050)
