@@ -418,6 +418,8 @@ void safe_mode()
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
 					statefunc=yaw_control_mode;
+				} else {
+					printf("offsets do not match 0!\n");
 				}
 				break;
 			case DUMP_FLASH_MODE:
