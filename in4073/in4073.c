@@ -15,6 +15,7 @@
 #include "in4073.h"
 #include "protocol/protocol.h"
 #include "states.h"
+#include "logging.c"
 
 #define MAXZ 4000000
 #define MAXL 1000000
@@ -162,6 +163,9 @@ void calculate_rpm(int Z, int L, int M, int N)
 void calibration_mode()
 {
 	cur_mode=CALIBRATION_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
+
 	//indicate that you are in calibration mode
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(GREEN,0);
@@ -201,8 +205,10 @@ void calibration_mode()
 
 void yaw_control_mode()
 {
-
+	
 	cur_mode=YAW_CONTROLLED_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
 
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,1);
@@ -220,7 +226,7 @@ void yaw_control_mode()
 		old_pitch=cur_pitch;
 		old_yaw=cur_yaw;
 		run_filters_and_control();
-		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+		print_to_pc();
 	}	
 	
 
@@ -232,7 +238,7 @@ void yaw_control_mode()
 			get_dmp_data();				
 			clear_sensor_int_flag();
 			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*32)*p_ctrl);
-			//printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+			//print_to_pc();
 		}
 	}
 	
@@ -262,10 +268,6 @@ void yaw_control_mode()
 		default:
 			break;
 	}
-
-
-	
-
 }
 
 
@@ -273,6 +275,8 @@ void yaw_control_mode()
 void manual_mode()
 {
 	cur_mode=MANUAL_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
 
 	//indicate that you are in manual mode
 	nrf_gpio_pin_write(RED,1);
@@ -290,8 +294,7 @@ void manual_mode()
 		old_roll=cur_roll;
 		old_pitch=cur_pitch;
 		old_yaw=cur_yaw;
-		//print your changed state
-		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+	
 	}	
 
 	//while there is no message received wait here and check your connection	
@@ -322,6 +325,8 @@ void manual_mode()
 void panic_mode()
 {
 	cur_mode=PANIC_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
 
 	//indicate that you are in panic mode
 	nrf_gpio_pin_write(RED,0);
@@ -346,9 +351,6 @@ void panic_mode()
 	old_pitch=0;
 	old_roll=0;
 	old_yaw=0;
-	
-	//print your changed state
-	printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
 
 	//after 2 seconds get to safe mode
 	nrf_delay_ms(2000);
@@ -367,6 +369,8 @@ void panic_mode()
 void safe_mode()
 {
 	cur_mode=SAFE_MODE;	
+	logging_enabled = false;
+	print_pc_enabled = true;
 
 	//indicate that you are in safe mode	
 	nrf_gpio_pin_write(RED,0);
@@ -379,16 +383,11 @@ void safe_mode()
 	ae[2]=0;
 	ae[3]=0;
 	run_filters_and_control();
-	if(safe_print==true)
-	{
-		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
-		safe_print=false;
-	}
+
 
 	//while no message is received wait here and check your connection
 	while(msg==false && connection==true)
 	{
-		
 		check_connection();
 	}
 	
@@ -402,8 +401,6 @@ void safe_mode()
 			case MANUAL_MODE:
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
-					//print your changed state
-					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",MANUAL_MODE,ae[0],ae[1],ae[2],ae[3],bat_volt);
 					statefunc=manual_mode;
 				}
 				break;
@@ -416,8 +413,6 @@ void safe_mode()
 			case YAW_CONTROLLED_MODE:
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
-					//print your changed state
-					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",YAW_CONTROLLED_MODE,ae[0],ae[1],ae[2],ae[3],bat_volt);
 					statefunc=yaw_control_mode;
 				}
 				break;
@@ -523,6 +518,9 @@ void initialize()
 	p_ctrl=10;
 	//first get to safe mode
 	statefunc= safe_mode;
+	//disable logging on startup
+	logging_enabled = false;
+	print_pc_enabled = true;
 }
 
 //if nothing received for over 500ms approximately go to panic mode and exit
@@ -537,38 +535,60 @@ void check_connection()
 	}
 }
 
+//jmi
+void print_to_pc(){
+	printf("%10ld | ", get_time_us());
+	printf("%d | ",cur_mode);
+	printf("%3d %3d %3d %3d | ",ae[0],ae[1],ae[2],ae[3]);
+	printf("%6d %6d %6d | ", phi, theta, psi);
+	printf("%6d %6d %6d | ", sp, sq, sr);
+	printf("%4d | %4ld | %6ld \n", bat_volt, temperature, pressure);
+}
+
+//jmi
+void battery_check(){
+	adc_request_sample();
+	
+	if (bat_volt < 1050)
+	{
+		printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
+		battery=false;
+		statefunc=panic_mode;
+	}
+}
+
 /*------------------------------------------------------------------
  * main -- do the test
  * edited by jmi
  *------------------------------------------------------------------
  */
-
-
 int main(void)
 {
 	//initialize the drone
 	initialize();
-	
+
+	uint32_t counter = 0;	
+
 	while (!demo_done)
 	{		
-		
 		//get to the state
 		(*statefunc)();
 
-		//check battery voltage	
-		if (check_timer_flag()) 
-		{
+		if (check_timer_flag()) {			
+			if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+			battery_check();
+			if(print_pc_enabled){
+				print_to_pc();
+			}
 			clear_timer_flag();
-			adc_request_sample();
-	
-			if (bat_volt < 1050)
-			{
-				printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
-				battery=false;
-				statefunc=panic_mode;
-			}		
-	
 		}
+
+		if (check_sensor_int_flag() && logging_enabled ) 
+		{
+			write_flight_data();	
+			clear_sensor_int_flag();
+		}
+
 	}	
 	
 	printf("\n\t Goodbye \n\n");

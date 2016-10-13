@@ -1,10 +1,11 @@
-
+#define MAX_FLASH_ADDRESS 0x01FFFF
 bool erase_flight_data();
 bool write_flight_data();
 bool read_flight_data();
 //the variable to be updated with get_time_us();
 uint32_t time;
 uint32_t N_BYTES = 24;
+
 /*------------------------------------------------------------------
  * logs the flight data 
  * write timestamp,mode,batteryvoltage,barometer, gyroscope and
@@ -16,7 +17,7 @@ bool write_flight_data(){
 	//time = get_time_us();
 	//adress between 0 and 131071
 	static uint32_t address = 0;
-	uint8_t data[nBytes];
+	uint8_t data[N_BYTES];
 	//time = uint32_t 
 	data[0] = (time>>24) & 0xFF; 
 	data[1] = (time>>16) & 0xFF; 
@@ -52,9 +53,9 @@ bool write_flight_data(){
 
 	printf("writing debug flight data\n");	
 
-	if(flash_write_bytes(address, data, nBytes)){
-		address = address + nBytes; 		
-		if((address + nBytes) >= MAX_FLASH_ADDRESS){
+	if(flash_write_bytes(address, data, N_BYTES)){
+		address = address + N_BYTES; 		
+		if((address + N_BYTES) >= MAX_FLASH_ADDRESS){
 			erase_flight_data();
 			address = 0;				
 		}
@@ -74,7 +75,7 @@ bool read_flight_data(){
 	//adress between 0 and 131071
 	static uint32_t address = 0;
 	
-	uint8_t buffer[nBytes];
+	uint8_t buffer[N_BYTES];
 	uint32_t rtime, rpressure;
 	uint8_t rmode;
     uint8_t static written_check = 170;
@@ -86,8 +87,8 @@ bool read_flight_data(){
 	//escape loop if end is reached, or byte 23 does not contain AA
 	//else we need to dump complete flash, which is time consuming.
 	//170 is an arbitrary picked value
-	while(((address + nBytes) < MAX_FLASH_ADDRESS) && (written_check == 170)) {
-		if(flash_read_bytes(address, buffer, nBytes)){
+	while(((address + N_BYTES) < MAX_FLASH_ADDRESS) && (written_check == 170)) {
+		if(flash_read_bytes(address, buffer, N_BYTES)){
 			rtime = (buffer[0]<<24) + (buffer[1]<<16) + (buffer[2]<<8) + (buffer[3]);
 			rmode = buffer[4];
 			rbat_volt = (buffer[5]<<8) + buffer[6];
@@ -103,7 +104,7 @@ bool read_flight_data(){
 			written_check = buffer[23];			
 			
 			printf("%ld,%ld,%d,%d,%ld,%d,%d,%d,%d,%d,%d,%d\n",address, rtime,rmode,rbat_volt,rpressure,rsp,rsq,rsr,rphi,rtheta,rpsi,written_check);		
-			address += nBytes;
+			address += N_BYTES;
 			nrf_delay_ms(15);		
 		}  else {
 			printf("error while reading\n");
