@@ -111,5 +111,6 @@ void ble_send(void);
 
 void print_to_pc(void);
 bool print_pc_enabled;
+void battery_check();
 
 #endif // IN4073_H__

@@ -31,6 +31,7 @@
 #define fixed_point_to_int(a) (int)(a>>8)
 
 bool decoupled_from_drone = true;
+uint32_t counter = 0;
 
 //calculate the Z force requested makis
 int calculate_Z(char lift)
@@ -240,13 +241,26 @@ void yaw_control_mode()
 			get_dmp_data();				
 			clear_sensor_int_flag();
 			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*32)*p_ctrl);
-			//print_to_pc();
+			write_flight_data();			
+		}
+	
+		if (check_timer_flag()) {			
+			if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+
+			battery_check();
+			if(print_pc_enabled){
+				print_to_pc();
+			}
+			clear_timer_flag();
 		}
 	}
 	
 	process_input();
 	switch (pc_packet.mode)	
 	{
+		case SAFE_MODE: 
+			statefunc=panic_mode;
+			break;			
 		case PANIC_MODE:
 			statefunc=panic_mode;
 			break;
@@ -303,6 +317,15 @@ void manual_mode()
 	while(msg==false && connection==true)
 	{
 		check_connection();
+		if (check_timer_flag()) {			
+			if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+
+			battery_check();
+			if(print_pc_enabled){
+				print_to_pc();
+			}
+			clear_timer_flag();
+		}
 	}
 
 	//read the new messages to come
@@ -335,7 +358,18 @@ void panic_mode()
 	//indicate that you are in panic mode
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,0);
+
+	if (check_timer_flag()) {			
+		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+
+		battery_check();
+		if(print_pc_enabled){
+			print_to_pc();
+		}
+		clear_timer_flag();
+	}
 	
+
 	//decrease motor speed untill motors are off
 	if(ae[0]>175 || ae[1]>175 || ae[2]>175 || ae[3]>175) {
 		ae[0]-=10;
@@ -382,12 +416,23 @@ void safe_mode()
 	nrf_gpio_pin_write(YELLOW,1);
 	nrf_gpio_pin_write(GREEN,1);
 
+	if (check_timer_flag()) {			
+		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+
+		battery_check();
+		if(print_pc_enabled){
+			print_to_pc();
+		}
+		clear_timer_flag();
+	}
+
 	//motors are shut down
 	ae[0]=0;
 	ae[1]=0;
 	ae[2]=0;
 	ae[3]=0;
 	run_filters_and_control();
+
 
 
 	//while no message is received wait here and check your connection
@@ -407,6 +452,9 @@ void safe_mode()
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
 					statefunc=manual_mode;
+				} else {
+					printf("offsets do not match 0!\n");
+					nrf_delay_ms(10);
 				}
 				break;
 			case CALIBRATION_MODE:
@@ -421,6 +469,7 @@ void safe_mode()
 					statefunc=yaw_control_mode;
 				} else {
 					printf("offsets do not match 0!\n");
+					nrf_delay_ms(10);
 				}
 				break;
 			case DUMP_FLASH_MODE:
@@ -531,9 +580,10 @@ void initialize()
 	connection=true;
 	safe_print=true;
 	p_ctrl=10;
-	//first get to safe mode
+
 	statefunc= safe_mode;
-	//disable logging on startup
+
+	erase_flight_data(); 
 	logging_enabled = false;
 	print_pc_enabled = true;
 }
@@ -586,27 +636,11 @@ int main(void)
 	//initialize the drone
 	initialize();
 
-	uint32_t counter = 0;	
 
 	while (!demo_done)
 	{		
 		//get to the state
 		(*statefunc)();
-
-		if (check_timer_flag()) {			
-			if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
-			battery_check();
-			if(print_pc_enabled){
-				print_to_pc();
-			}
-			clear_timer_flag();
-		}
-
-		if (check_sensor_int_flag() && logging_enabled ) 
-		{
-			write_flight_data();	
-			clear_sensor_int_flag();
-		}
 
 	}	
 	
