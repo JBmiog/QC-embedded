@@ -31,19 +31,15 @@ void push_packet(char direction, char value)
     {
     case LIFT:
         js_lift = value;
-        //printf ("LIFT: %d \n\n", js_lift);
         break;
     case PITCH:
         js_pitch = value;
-        //printf ("PITCH: %d \n\n", js_pitch);
         break;
     case ROLL:
         js_roll = value;
-        //printf ("ROLL: %d \n\n", js_roll);
         break;
     case YAW:
         js_yaw = value;
-        //printf ("YAW: %d \n\n", js_yaw);
         break;
     }
 }
@@ -589,6 +585,19 @@ void tx_packet()
 }
 
 /*----------------------------------------------------------------
+* jmi
+* the xbox js we use for testing outside lab ours has strange 
+* offsets compaired to the offsets of the js in the lab, this 
+* function compensates for these offsets by directly setting 
+* the corresponding kb_offsets.
+*----------------------------------------------------------------
+ */
+void xbox_js_init(){
+	kb_lift = -32;
+	kb_yaw = 63;
+}
+
+/*----------------------------------------------------------------
  * main -- jmi
  *----------------------------------------------------------------
  */
@@ -600,7 +609,7 @@ int main(int argc, char **argv)
 
     term_initio();
     rs232_open();
-
+		
     /* display keyboard mapping */
     term_puts("keyboard mapping:\n");
     term_puts("a:\t	lift_offset up\n 'z':\t	lift_offset down\n");
@@ -611,7 +620,9 @@ int main(int argc, char **argv)
 
     term_puts("\nType ^C to exit\n");
 
-    joystick_init();
+	xbox_js_init();
+    
+	joystick_init();
     
 	unsigned int old_time, current_time;
 	old_time = mon_time_ms();
