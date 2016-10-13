@@ -336,14 +336,20 @@ void panic_mode()
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,0);
 	
-	//fly at minimum rpm
-	if(ae[0]>175 || ae[1]>175 || ae[2]>175 || ae[3]>175) 
-	{
-		ae[0]=175;
-		ae[1]=175;
-		ae[2]=175;
-		ae[3]=175;
+	//decrease motor speed untill motors are off
+	if(ae[0]>175 || ae[1]>175 || ae[2]>175 || ae[3]>175) {
+		ae[0]-=10;
+		ae[1]-=10;
+		ae[2]-=10;
+		ae[3]-=10;
 		run_filters_and_control();
+		//delay for next round
+		nrf_delay_ms(8);
+	}
+
+	//enters safe mode
+	if(ae[0]<=175 || ae[1]<=175 || ae[2]<=175 || ae[3]<=175){
+		statefunc=safe_mode;
 	}
 
 	//zero down some values
@@ -356,17 +362,12 @@ void panic_mode()
 	old_roll=0;
 	old_yaw=0;
 
-	//after 2 seconds get to safe mode
-	nrf_delay_ms(2000);
-
 	//fixes a bug, doesn't care to check connection going to safe mode anyway
 	time_latest_packet_us=get_time_us();
 
 	//flag to print once in safe mode
 	safe_print=true;
 
-	//enters safe mode
-	statefunc=safe_mode;
 }
 
 //safe mode state makis 
