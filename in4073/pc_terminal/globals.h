@@ -20,8 +20,10 @@ char js_lift;
 
 char yaw_offset_p_up;
 char yaw_offset_p_down;
-char roll_pitch_offset_p1;
-char roll_pitch_offset_p2;
+char roll_pitch_offset_p1_up;
+char roll_pitch_offset_p2_up;
+char roll_pitch_offset_p1_down;
+char roll_pitch_offset_p2_down;
 
 char mode = 0;
 

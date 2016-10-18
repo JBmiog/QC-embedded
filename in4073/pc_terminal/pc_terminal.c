@@ -31,19 +31,15 @@ void push_packet(char direction, char value)
     {
     case LIFT:
         js_lift = value;
-        //printf ("LIFT: %d \n\n", js_lift);
         break;
     case PITCH:
         js_pitch = value;
-        //printf ("PITCH: %d \n\n", js_pitch);
         break;
     case ROLL:
         js_roll = value;
-        //printf ("ROLL: %d \n\n", js_roll);
         break;
     case YAW:
         js_yaw = value;
-        //printf ("YAW: %d \n\n", js_yaw);
         break;
     }
 }
@@ -362,7 +358,7 @@ int rs232_putchar(char c)
     return result;
 }
 
-/* handles the input of the keyboard, Jeffrey Miog */
+/* handles the input of the keyboard, Jeffrey Miog = jmi */
 void kb_input_handler(char pressed_key)
 {
     switch(pressed_key)
@@ -397,6 +393,12 @@ void kb_input_handler(char pressed_key)
     case EIGHT:
         mode = WIRELESS_MODE;
         break;
+	case NINE:
+		mode = DUMP_FLASH_MODE;
+		break;
+	case MINUS_SYMBOL:
+		mode = SHUTDOWN_MODE;
+		break;
     case 'a':
         if(lift_offset!=63)
         {
@@ -429,16 +431,16 @@ void kb_input_handler(char pressed_key)
         yaw_offset_p_down=0x02;
         break;
     case 'i':
-        roll_pitch_offset_p1 = UP;
+        roll_pitch_offset_p1_up = 0x04;
         break;
     case 'k':
-        roll_pitch_offset_p1 = DOWN;
+        roll_pitch_offset_p1_down = 0x08;
         break;
     case 'o':
-        roll_pitch_offset_p2 = UP;
+        roll_pitch_offset_p2_up = 0x10;
         break;
     case 'l':
-        roll_pitch_offset_p2 = DOWN;
+        roll_pitch_offset_p2_down = 0x20;
         break;
     //arrow up
     case 'A':
@@ -490,7 +492,7 @@ void kb_input_handler(char pressed_key)
 /* jmi */
 void print_static_offsets()
 {
-    printf("PC SIDE: mode=%d, kb_yaw=%d, js_yaw=%d, kb_pitch=%d, js_pitch=%d, kb_roll=%d, js_roll=%d, kb_lift=%d, js_lift=%d, p=%d, P1=%d, P2=%d\n",mode, yaw_offset, js_yaw, pitch_offset, js_pitch, roll_offset, js_roll, lift_offset, js_lift, yaw_offset_p_up|yaw_offset_p_down, roll_pitch_offset_p1, roll_pitch_offset_p2);
+    printf("PC SIDE: mode=%d, kb_yaw=%d, js_yaw=%d, kb_pitch=%d, js_pitch=%d, kb_roll=%d, js_roll=%d, kb_lift=%d, js_lift=%d, p=%d, P1=%d, P2=%d\n",mode, yaw_offset, js_yaw, pitch_offset, js_pitch, roll_offset, js_roll, lift_offset, js_lift, yaw_offset_p_up|yaw_offset_p_down, roll_pitch_offset_p1_up|roll_pitch_offset_p1_down, roll_pitch_offset_p2_up|roll_pitch_offset_p2_down);
 }
 
 /*jmi*/
@@ -544,15 +546,14 @@ char inspect_overflow_1(char offset, char js, char kb)
 
 
 /* jmi
-the &0x7F is for savety only, so we know MSB is only set in the
+the &0x7F is for safety only, so we know MSB is only set in the
 header
 */
 void create_packet()
 {
     mypacket.header = HEADER_VALUE;
     mypacket.mode = mode;
-    mypacket.p_adjust = yaw_offset_p_up | yaw_offset_p_down;
-    /*here i need the joystick...?*/
+    mypacket.p_adjust = yaw_offset_p_up | yaw_offset_p_down | roll_pitch_offset_p1_up | roll_pitch_offset_p1_down| roll_pitch_offset_p2_up| roll_pitch_offset_p2_down;
     mypacket.lift = inspect_overflow_1(lift_offset, js_lift, kb_lift);
     mypacket.pitch = inspect_overflow(pitch_offset, js_pitch, kb_pitch);
     mypacket.roll = inspect_overflow(roll_offset, js_roll, kb_roll);
@@ -576,16 +577,37 @@ void tx_packet()
    	//reseting p_adjust values
    	yaw_offset_p_up=0;
     yaw_offset_p_down=0;
-						
+	roll_pitch_offset_p1_up=0;
+	roll_pitch_offset_p1_down=0;
+	roll_pitch_offset_p2_up=0;
+	roll_pitch_offset_p2_down=0;
+
+	//reset mode after we did a flash dump	
+	if(mode == DUMP_FLASH_MODE){
+		mode = SAFE_MODE;
+	}
+	if(mode == CALIBRATION_MODE){
+		mode = SAFE_MODE;
+	}					
 }
 
 /*----------------------------------------------------------------
- * main -- execute terminal
- * edited by jmi
+* jmi
+* the xbox js we use for testing outside lab ours has strange 
+* offsets compaired to the offsets of the js in the lab, this 
+* function compensates for these offsets by directly setting 
+* the corresponding kb_offsets.
+*----------------------------------------------------------------
+ */
+void xbox_js_init(){
+	kb_lift = -32;
+	kb_yaw = 63;
+}
+
+/*----------------------------------------------------------------
+ * main -- jmi
  *----------------------------------------------------------------
  */
-
-
 int main(int argc, char **argv)
 {
     char	c;
@@ -594,7 +616,7 @@ int main(int argc, char **argv)
 
     term_initio();
     rs232_open();
-
+		
     /* display keyboard mapping */
     term_puts("keyboard mapping:\n");
     term_puts("a:\t	lift_offset up\n 'z':\t	lift_offset down\n");
@@ -605,8 +627,9 @@ int main(int argc, char **argv)
 
     term_puts("\nType ^C to exit\n");
 
-
-    joystick_init();
+	//xbox_js_init();
+    
+	joystick_init();
     
 	unsigned int old_time, current_time;
 	old_time = mon_time_ms();
@@ -614,29 +637,29 @@ int main(int argc, char **argv)
     while(1)
     {
 	
-	//read messages from the board 
+		//read messages from the board 
         if ((c = rs232_getchar_nb()) != -1)
         {
              term_putchar(c);
         }
 
-	//construct message to the board	
-	read_js(fd);
-        while ((c = term_getchar_nb()) != -1)
+		read_js(fd);
+ 
+		while ((c = term_getchar_nb()) != -1)
         {
             kb_input_handler(c);
-	    print_static_offsets();
+		    print_static_offsets();
         }
 
      
-	//send messages to the board
-	current_time=mon_time_ms();	
-	if((current_time - old_time) > 100)
-	{
-        	create_packet();
-		tx_packet();
-		old_time=current_time;
-	}
+		//send messages to the board
+		current_time=mon_time_ms();	
+		if((current_time - old_time) > 50)
+		{
+	    	create_packet();
+			tx_packet();
+			old_time=current_time;
+		}
      }
 
     term_exitio();
