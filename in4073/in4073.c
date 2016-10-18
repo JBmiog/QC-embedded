@@ -17,14 +17,14 @@
 #include "states.h"
 #include "logging.c"
 
-#define MAXZ 1842400
-#define MAXL 350000
-#define MAXM 350000
-#define MAXN 700000
+#define MAXZ 4000000
+#define MAXL 1000000
+#define MAXM 1000000
+#define MAXN 2000000
 #define BAT_THRESHOLD  1050
 
-#define MIN_RPM 204800
-#define MAX_RPM 665600
+#define MIN_RPM 250200
+#define MAX_RPM 650200
 
 #define int_to_fixed_point(a) (((int16_t)a)<<8)
 #define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
@@ -173,6 +173,7 @@ void calibration_mode()
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,1);
 	nrf_gpio_pin_write(GREEN,0);
+	nrf_delay_ms(10000);
 	//counter
 	int clb;
 	clb=0;
@@ -189,10 +190,6 @@ void calibration_mode()
 			r_off=r_off+sr;
 			phi_off=phi_off+phi;
 			theta_off=theta_off+theta;
-		}
-		if(msg==true)
-		{
-			process_input();
 		}	
 	}
 
