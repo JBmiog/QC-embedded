@@ -20,10 +20,8 @@
 
 
 #define NANO_SECOND_MULTIPLIER 1000000
-/*------------------------------------------------------------
-* joystick I/O
-*------------------------------------------------------------
-*/
+
+/* Push joystick value to global value --Hongjia Wu */
 
 void push_packet(char direction, char value)
 {
@@ -39,13 +37,13 @@ void push_packet(char direction, char value)
         js_roll = value;
         break;
     case YAW:
-        js_yaw = value;
+        js_yaw = -value;
         break;
     }
 }
 
 
-/* time */
+/* Get time and set delay. --Hongjia Wu*/
 unsigned int mon_time_ms(void)
 {
     unsigned int    ms;
@@ -67,6 +65,8 @@ void mon_delay_ms(unsigned int ms)
     assert(nanosleep(&req,&rem) == 0);
 }
 
+/*Align roll, pitch and yaw --Hongjia Wu*/
+
 void set_js_packet(char direction, int axis, int divisor)
 {
     float throttle_on_scale = 0, multiplier = 63;
@@ -84,6 +84,28 @@ void set_js_packet(char direction, int axis, int divisor)
     push_packet(direction, send_value);
 
 }
+/*Align lift --Hongjia Wu*/
+void set_lift_packet(char direction, unsigned int axis, int divisor)
+{
+    float throttle_on_scale = 0, multiplierlow = 75, multiplierhigh = 52;
+    char send_value;
+
+    throttle_on_scale = (axis + (divisor / 2)) / divisor;
+
+    if(throttle_on_scale > 2000)
+        throttle_on_scale = 2000;
+
+    if(throttle_on_scale < 1000)
+        send_value = throttle_on_scale/1000.0*multiplierlow;
+
+   if(throttle_on_scale > 1000)
+        send_value = 75 + (throttle_on_scale - 1000.0)/1000.0*multiplierhigh;
+
+    push_packet(direction, send_value);
+
+}
+
+/*Read value of joystick --Hongjia Wu*/
 
 int read_js(int fd)
 {
@@ -173,10 +195,9 @@ int read_js(int fd)
 
     //lift
     total = 65534 - (axis[3] + 32767);
-	cc = total / 2 ;
-    if (cc > JS_MIN_VALUE)
+    if (total > JS_MIN_VALUE)
     {
-        set_js_packet(LIFT, cc, JS_STEP_DIVISION_SMALL);
+        set_lift_packet(LIFT, total, JS_STEP_DIVISION_SMALL);
     }
     else
     {
@@ -192,6 +213,7 @@ int read_js(int fd)
  */
 struct termios 	savetty;
 
+/*Open joystick in non blocking mode --Hongjia Wu*/
 void joystick_init()
 {
 
@@ -501,7 +523,7 @@ char get_checksum()
     char checksum = (mypacket.header^mypacket.mode^mypacket.p_adjust^mypacket.lift^mypacket.pitch^mypacket.roll^mypacket.yaw) >> 1;
     return checksum;
 }
-
+/*Inspect overflow for roll, pitch and yaw --Hongjia Wu*/
 char inspect_overflow(char offset, char js, char kb)
 {
 
