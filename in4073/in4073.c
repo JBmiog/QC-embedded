@@ -15,19 +15,23 @@
 #include "in4073.h"
 #include "protocol/protocol.h"
 #include "states.h"
+#include "logging.c"
 
-#define MAXZ 4000000
-#define MAXL 1000000
-#define MAXM 1000000
-#define MAXN 2000000
+#define MAXZ 1842400
+#define MAXL 350000
+#define MAXM 350000
+#define MAXN 700000
 #define BAT_THRESHOLD  1050
 
-#define MIN_RPM 179200
-#define MAX_RPM 1000000
+#define MIN_RPM 204800
+#define MAX_RPM 665600
 
 #define int_to_fixed_point(a) (((int16_t)a)<<8)
 #define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
 #define fixed_point_to_int(a) (int)(a>>8)
+
+bool decoupled_from_drone = false;
+uint32_t counter = 0;
 
 //calculate the Z force requested makis
 int calculate_Z(char lift)
@@ -162,14 +166,18 @@ void calculate_rpm(int Z, int L, int M, int N)
 void calibration_mode()
 {
 	cur_mode=CALIBRATION_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
+
 	//indicate that you are in calibration mode
 	nrf_gpio_pin_write(RED,1);
+	nrf_gpio_pin_write(YELLOW,1);
 	nrf_gpio_pin_write(GREEN,0);
 	//counter
 	int clb;
 	clb=0;
-	//take 200 samples 
-	while(clb<200)
+	//take 256 samples 
+	while(clb<256)
 	{
 		if (check_sensor_int_flag())
 		{
@@ -178,20 +186,143 @@ void calibration_mode()
 			clb++;
 			p_off=p_off+sp;
 			q_off=q_off+sq;
-			r_off=r_off+sq;	
+			r_off=r_off+sr;
+			phi_off=phi_off+phi;
+			theta_off=theta_off+theta;
+		}
+		if(msg==true)
+		{
+			process_input();
 		}	
 	}
+
 	//calculate the offset
-	p_off=p_off/200;
-	q_off=q_off/200;
-	r_off=r_off/200;
+	p_off=p_off>>8;
+	q_off=q_off>>8;
+	r_off=r_off>>8;
+	phi_off=phi_off>>8;
+	theta_off=theta_off>>8;	
+
+	//fix a bug
+	time_latest_packet_us=get_time_us();
+	//print offsets
+	printf("sp_off=%ld, sq_off=%ld, sr_off=%ld,phi_off=%ld,theta_off=%ld\n",p_off,q_off,r_off,phi_off,theta_off);
+	//get back to safe mode
+	statefunc=safe_mode;
+}
+
+
+void full_control_mode()
+{
 	
-	//check the messages
+	cur_mode=FULL_CONTROL_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
+
+	nrf_gpio_pin_write(RED,1);
+	nrf_gpio_pin_write(YELLOW,0);
+	nrf_gpio_pin_write(GREEN,0);
+
+	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
+	{
+		lift_force=calculate_Z(cur_lift);
+		roll_moment=calculate_L(cur_roll);
+		pitch_moment=calculate_M(cur_pitch);
+		yaw_moment=calculate_N(cur_yaw);
+		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
+		old_lift=cur_lift;
+		old_roll=cur_roll;
+		old_pitch=cur_pitch;
+		old_yaw=cur_yaw;
+		run_filters_and_control();
+		print_to_pc();
+	}	
+	
+
+	while(msg==false && connection==true)
+	{
+		check_connection();
+		if (check_sensor_int_flag())
+		{
+			get_dmp_data();				
+			clear_sensor_int_flag();
+			calculate_rpm(lift_force, roll_moment + (roll_moment-(phi-phi_off)*26)*p1_ctrl-(sp-p_off)*26*p2_ctrl, pitch_moment + (pitch_moment-(theta-theta_off)*26)*p1_ctrl+(sq-q_off)*26*p2_ctrl,yaw_moment - (yaw_moment-(sr-r_off)*32)*p_ctrl);
+			//write_flight_data();			
+		}
+	
+		if (check_timer_flag()) {			
+			if (counter++%20 == 0)
+			{		
+		 		nrf_gpio_pin_toggle(BLUE);
+
+				battery_check();
+				if(print_pc_enabled){
+					print_to_pc();
+				}
+			}
+			clear_timer_flag();
+		}
+	}
+	
 	process_input();
 	switch (pc_packet.mode)	
-	{
-		case SAFE_MODE:
-			statefunc=safe_mode;
+	{			
+		case PANIC_MODE:
+			statefunc=panic_mode;
+			break;
+		case FULL_CONTROL_MODE:
+			cur_lift=pc_packet.lift;
+			cur_pitch=pc_packet.pitch;
+			cur_roll=pc_packet.roll;
+			cur_yaw=pc_packet.yaw;
+			if(pc_packet.p_adjust==1)
+			{
+				p_ctrl=p_ctrl+1;
+				if(p_ctrl>=127)
+				{
+					p_ctrl=127;
+				}
+			}
+			if(pc_packet.p_adjust==2)
+			{
+				p_ctrl=p_ctrl-1;
+				if(p_ctrl<=0)
+				{
+					p_ctrl=0;
+				}
+			}
+			if(pc_packet.p_adjust==0x4)
+			{
+				p1_ctrl=p1_ctrl+1;
+				if(p1_ctrl>=127)
+				{
+					p1_ctrl=127;
+				}
+			}
+			if(pc_packet.p_adjust==0x8)
+			{
+				p1_ctrl=p1_ctrl-1;
+				if(p1_ctrl<=0)
+				{
+					p1_ctrl=0;
+				}
+			}
+			if(pc_packet.p_adjust==0x10)
+			{
+				p2_ctrl=p2_ctrl+1;
+				if(p2_ctrl>=127)
+				{
+					p2_ctrl=127;
+				}
+			}
+			if(pc_packet.p_adjust==0x20)
+			{
+				p2_ctrl=p2_ctrl-1;
+				if(p2_ctrl<=0)
+				{
+					p2_ctrl=0;
+				}
+			}
 			break;
 		default:
 			break;
@@ -199,10 +330,13 @@ void calibration_mode()
 }
 
 
+
 void yaw_control_mode()
 {
-
+	
 	cur_mode=YAW_CONTROLLED_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
 
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,1);
@@ -220,7 +354,7 @@ void yaw_control_mode()
 		old_pitch=cur_pitch;
 		old_yaw=cur_yaw;
 		run_filters_and_control();
-		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+		print_to_pc();
 	}	
 	
 
@@ -232,7 +366,20 @@ void yaw_control_mode()
 			get_dmp_data();				
 			clear_sensor_int_flag();
 			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*32)*p_ctrl);
-			//printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+			//write_flight_data();			
+		}
+	
+		if (check_timer_flag()) {			
+			if (counter++%20 == 0)
+			{
+				 nrf_gpio_pin_toggle(BLUE);
+
+				battery_check();
+				if(print_pc_enabled){
+					print_to_pc();
+				}
+			}
+			clear_timer_flag();
 		}
 	}
 	
@@ -259,13 +406,10 @@ void yaw_control_mode()
 					p_ctrl=1;
 				}
 			}
+			break;
 		default:
 			break;
 	}
-
-
-	
-
 }
 
 
@@ -273,6 +417,8 @@ void yaw_control_mode()
 void manual_mode()
 {
 	cur_mode=MANUAL_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
 
 	//indicate that you are in manual mode
 	nrf_gpio_pin_write(RED,1);
@@ -290,14 +436,25 @@ void manual_mode()
 		old_roll=cur_roll;
 		old_pitch=cur_pitch;
 		old_yaw=cur_yaw;
-		//print your changed state
-		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+	
 	}	
 
 	//while there is no message received wait here and check your connection	
 	while(msg==false && connection==true)
 	{
 		check_connection();
+		if (check_timer_flag()) {			
+			if (counter++%20 == 0) 
+			{
+				nrf_gpio_pin_toggle(BLUE);
+
+				battery_check();
+				if(print_pc_enabled){
+					print_to_pc();
+				}
+			}
+			clear_timer_flag();
+		}
 	}
 
 	//read the new messages to come
@@ -313,6 +470,8 @@ void manual_mode()
 			cur_roll=pc_packet.roll;
 			cur_yaw=pc_packet.yaw;
 			break;
+		case SAFE_MODE:
+			statefunc=safe_mode;
 		default:
 			break;
 	}
@@ -322,19 +481,36 @@ void manual_mode()
 void panic_mode()
 {
 	cur_mode=PANIC_MODE;
+	logging_enabled = true;
+	print_pc_enabled = true;
 
 	//indicate that you are in panic mode
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,0);
+
+	if (check_timer_flag()) {			
+		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+	}
 	
-	//fly at minimum rpm
-	if(ae[0]>175 || ae[1]>175 || ae[2]>175 || ae[3]>175) 
-	{
-		ae[0]=175;
-		ae[1]=175;
-		ae[2]=175;
-		ae[3]=175;
+
+	//decrease motor speed untill motors are off
+	if(ae[0]>175 || ae[1]>175 || ae[2]>175 || ae[3]>175) {
+		ae[0]-=10;
+		ae[1]-=10;
+		ae[2]-=10;
+		ae[3]-=10;
 		run_filters_and_control();
+		//delay for next round
+		nrf_delay_ms(200);
+		if(print_pc_enabled){
+			print_to_pc();
+		}
+		clear_timer_flag();
+	}
+
+	//enters safe mode
+	if(ae[0]<=175 || ae[1]<=175 || ae[2]<=175 || ae[3]<=175){
+		statefunc=safe_mode;
 	}
 
 	//zero down some values
@@ -346,12 +522,11 @@ void panic_mode()
 	old_pitch=0;
 	old_roll=0;
 	old_yaw=0;
-	
-	//print your changed state
-	printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
+	lift_force=0;
+	roll_moment=0;
+	yaw_moment=0;
+	pitch_moment=0;
 
-	//after 2 seconds get to safe mode
-	nrf_delay_ms(2000);
 
 	//fixes a bug, doesn't care to check connection going to safe mode anyway
 	time_latest_packet_us=get_time_us();
@@ -359,19 +534,29 @@ void panic_mode()
 	//flag to print once in safe mode
 	safe_print=true;
 
-	//enters safe mode
-	statefunc=safe_mode;
 }
 
 //safe mode state makis 
 void safe_mode()
 {
 	cur_mode=SAFE_MODE;	
+	logging_enabled = false;
+	print_pc_enabled = true;
 
 	//indicate that you are in safe mode	
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,1);
 	nrf_gpio_pin_write(GREEN,1);
+
+	if (check_timer_flag()) {			
+		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+
+		battery_check();
+		if(print_pc_enabled){
+			print_to_pc();
+		}
+		clear_timer_flag();
+	}
 
 	//motors are shut down
 	ae[0]=0;
@@ -379,16 +564,12 @@ void safe_mode()
 	ae[2]=0;
 	ae[3]=0;
 	run_filters_and_control();
-	if(safe_print==true)
-	{
-		printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",cur_mode,ae[0],ae[1],ae[2],ae[3],bat_volt);
-		safe_print=false;
-	}
+
+
 
 	//while no message is received wait here and check your connection
 	while(msg==false && connection==true)
 	{
-		
 		check_connection();
 	}
 	
@@ -402,9 +583,10 @@ void safe_mode()
 			case MANUAL_MODE:
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
-					//print your changed state
-					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",MANUAL_MODE,ae[0],ae[1],ae[2],ae[3],bat_volt);
 					statefunc=manual_mode;
+				} else {
+					printf("offsets do not match 0!\n");
+					nrf_delay_ms(10);
 				}
 				break;
 			case CALIBRATION_MODE:
@@ -416,10 +598,28 @@ void safe_mode()
 			case YAW_CONTROLLED_MODE:
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
-					//print your changed state
-					printf("DRONE SIDE: mode=%d, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d, bat_volt=%d \n",YAW_CONTROLLED_MODE,ae[0],ae[1],ae[2],ae[3],bat_volt);
 					statefunc=yaw_control_mode;
+				} else {
+					printf("offsets do not match 0!\n");
+					nrf_delay_ms(10);
 				}
+				break;
+			case FULL_CONTROL_MODE:
+				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
+				{
+					statefunc=full_control_mode;
+				} else {
+					printf("offsets do not match 0!\n");
+					nrf_delay_ms(10);
+				}
+				break;
+			case DUMP_FLASH_MODE:
+				read_flight_data();
+				break;
+			case SHUTDOWN_MODE:
+				printf("\n\t Goodbye \n\n");
+				nrf_delay_ms(100);
+				NVIC_SystemReset();
 				break;
 			default:
 				break;
@@ -520,9 +720,20 @@ void initialize()
 	battery=true;
 	connection=true;
 	safe_print=true;
-	p_ctrl=10;
-	//first get to safe mode
+	p_ctrl=12;
+	p1_ctrl=3;
+	p2_ctrl=5;
+	p_off=0;
+	q_off=0;
+	r_off=0;
+	theta_off=0;
+	phi_off=0;
+
 	statefunc= safe_mode;
+
+	erase_flight_data(); 
+	logging_enabled = false;
+	print_pc_enabled = true;
 }
 
 //if nothing received for over 500ms approximately go to panic mode and exit
@@ -537,38 +748,48 @@ void check_connection()
 	}
 }
 
+//jmi
+void print_to_pc(){
+	//printf("%10ld | ", get_time_us());
+	printf("%d | ",cur_mode);
+	printf("%3d %3d %3d %3d | ",ae[0],ae[1],ae[2],ae[3]);
+	printf("%6d %6d %6d | ", p_ctrl, p1_ctrl, p2_ctrl);
+	//printf("%6d %6d %6d | ", sp, sq, sr);
+	printf("%4d | %4ld | %6ld \n", bat_volt, temperature, pressure);
+}
+
+//jmi
+void battery_check(){
+	//for testing purpose, the bat is not connected.
+	if(decoupled_from_drone) {
+		return; 
+	}
+	adc_request_sample();
+	
+	if (bat_volt < 1050)
+	{
+		printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
+		battery=false;
+		statefunc=panic_mode;
+	}
+}
+
 /*------------------------------------------------------------------
  * main -- do the test
  * edited by jmi
  *------------------------------------------------------------------
  */
-
-
 int main(void)
 {
 	//initialize the drone
 	initialize();
-	
+
+
 	while (!demo_done)
 	{		
-		
 		//get to the state
 		(*statefunc)();
 
-		//check battery voltage	
-		if (check_timer_flag()) 
-		{
-			clear_timer_flag();
-			adc_request_sample();
-	
-			if (bat_volt < 1050)
-			{
-				printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
-				battery=false;
-				statefunc=panic_mode;
-			}		
-	
-		}
 	}	
 	
 	printf("\n\t Goodbye \n\n");

@@ -102,11 +102,15 @@ bool flash_write_byte(uint32_t address, uint8_t data);
 bool flash_write_bytes(uint32_t address, uint8_t *data, uint32_t count);
 bool flash_read_byte(uint32_t address, uint8_t *buffer);
 bool flash_read_bytes(uint32_t address, uint8_t *buffer, uint32_t count);
-
+bool logging_enabled;
 // BLE
 queue ble_rx_queue;
 queue ble_tx_queue;
 void ble_init(void);
 void ble_send(void);
+
+void print_to_pc(void);
+bool print_pc_enabled;
+void battery_check();
 
 #endif // IN4073_H__

@@ -21,6 +21,8 @@ char cur_mode;
 
 //p controller value
 char p_ctrl;
+char p1_ctrl;
+char p2_ctrl;
 
 //variable to hold current movement
 char cur_lift;
@@ -41,9 +43,11 @@ int pitch_moment;
 int yaw_moment;
 
 //dc offset of gyro sensor
-int16_t p_off;
-int16_t q_off;
-int16_t r_off;
+int32_t p_off;
+int32_t q_off;
+int32_t r_off;
+int32_t theta_off;
+int32_t phi_off;
 
 //counters to take care of exiting when communication breaks down
 uint32_t time_latest_packet_us, current_time_us;
