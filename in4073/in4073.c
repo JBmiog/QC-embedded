@@ -18,8 +18,8 @@
 #include "logging.c"
 
 #define MAXZ 1842400
-#define MAXL 350000
-#define MAXM 350000
+#define MAXL 325000
+#define MAXM 325000
 #define MAXN 700000
 #define BAT_THRESHOLD  1050
 
@@ -30,7 +30,7 @@
 #define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
 #define fixed_point_to_int(a) (int)(a>>8)
 
-bool decoupled_from_drone = false;
+bool decoupled_from_drone = true;
 uint32_t counter = 0;
 
 //calculate the Z force requested makis
@@ -203,9 +203,9 @@ void calibration_mode()
 	phi_off=phi_off>>8;
 	theta_off=theta_off>>8;	
 
-	//fix a bug
+	//fix a bug, don't care to check connection getting to safe mode anyway
 	time_latest_packet_us=get_time_us();
-	//print offsets
+	//print offsets of calibrated values
 	printf("sp_off=%ld, sq_off=%ld, sr_off=%ld,phi_off=%ld,theta_off=%ld\n",p_off,q_off,r_off,phi_off,theta_off);
 	//get back to safe mode
 	statefunc=safe_mode;
@@ -246,8 +246,7 @@ void full_control_mode()
 		{
 			get_dmp_data();				
 			clear_sensor_int_flag();
-			calculate_rpm(lift_force, roll_moment + (roll_moment-(phi-phi_off)*26)*p1_ctrl-(sp-p_off)*26*p2_ctrl, pitch_moment + (pitch_moment-(theta-theta_off)*26)*p1_ctrl+(sq-q_off)*26*p2_ctrl,yaw_moment - (yaw_moment-(sr-r_off)*32)*p_ctrl);
-			//write_flight_data();			
+			calculate_rpm(lift_force, roll_moment + (roll_moment-(phi-phi_off)*16)*p1_ctrl-(sp-p_off)*16*p2_ctrl, pitch_moment + (pitch_moment-(theta-theta_off)*16)*p1_ctrl+(sq-q_off)*16*p2_ctrl,yaw_moment - (yaw_moment-(sr-r_off)*16)*p_ctrl);		
 		}
 	
 		if (check_timer_flag()) {			
@@ -365,8 +364,7 @@ void yaw_control_mode()
 		{
 			get_dmp_data();				
 			clear_sensor_int_flag();
-			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*32)*p_ctrl);
-			//write_flight_data();			
+			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*16)*p_ctrl);		
 		}
 	
 		if (check_timer_flag()) {			
@@ -423,6 +421,7 @@ void manual_mode()
 	//indicate that you are in manual mode
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,0);
+	nrf_gpio_pin_write(GREEN,1);
 
 	//if there is a new command do the calculations
 	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
@@ -436,7 +435,6 @@ void manual_mode()
 		old_roll=cur_roll;
 		old_pitch=cur_pitch;
 		old_yaw=cur_yaw;
-	
 	}	
 
 	//while there is no message received wait here and check your connection	
@@ -447,7 +445,6 @@ void manual_mode()
 			if (counter++%20 == 0) 
 			{
 				nrf_gpio_pin_toggle(BLUE);
-
 				battery_check();
 				if(print_pc_enabled){
 					print_to_pc();
@@ -487,6 +484,7 @@ void panic_mode()
 	//indicate that you are in panic mode
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,0);
+	nrf_gpio_pin_write(GREEN,1);
 
 	if (check_timer_flag()) {			
 		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
@@ -526,7 +524,6 @@ void panic_mode()
 	roll_moment=0;
 	yaw_moment=0;
 	pitch_moment=0;
-
 
 	//fixes a bug, doesn't care to check connection going to safe mode anyway
 	time_latest_packet_us=get_time_us();
