@@ -17,14 +17,16 @@
 #include "states.h"
 #include "logging.c"
 
-#define MAXZ 4000000
-#define MAXL 1000000
-#define MAXM 1000000
-#define MAXN 2000000
+#define MAXZ 1228800
+
+#define MAXL 80000
+#define MAXM 80000
+#define MAXN 80000
+
 #define BAT_THRESHOLD  1050
 
-#define MIN_RPM 250200
-#define MAX_RPM 650200
+#define MIN_RPM 204800
+#define MAX_RPM 768000
 
 #define int_to_fixed_point(a) (((int16_t)a)<<8)
 #define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
@@ -39,7 +41,7 @@ int calculate_Z(char lift)
 	int Z;
 	int8_t l;
 	l=lift;
-	Z=divide_fixed_points(int_to_fixed_point(l),int_to_fixed_point(63));	
+	Z=divide_fixed_points(int_to_fixed_point(l),int_to_fixed_point(127));	
 	Z=Z*MAXZ;
 	Z=fixed_point_to_int(Z);
 	return Z;
@@ -60,7 +62,8 @@ int calculate_L(char roll)
 	{	
 		r=roll;	
 	}
-
+	r=r>>3;
+	
 	L=divide_fixed_points(int_to_fixed_point(r),int_to_fixed_point(63));
 	L=L*MAXL;	
 	L=fixed_point_to_int(L);
@@ -85,7 +88,7 @@ int calculate_M(char pitch)
 	{	
 		p=pitch;	
 	}
-
+	p=p>>3;
 	M=divide_fixed_points(int_to_fixed_point(p),int_to_fixed_point(63));
 	M=M*MAXM;
 	M=fixed_point_to_int(M);
@@ -107,7 +110,7 @@ int calculate_N(char yaw)
 		y=yaw;	
 	}
 
-
+	y=y>>3;
 	N=divide_fixed_points(int_to_fixed_point(y),int_to_fixed_point(63));
 	N=N*MAXN;	
 	N=fixed_point_to_int(N);
@@ -123,8 +126,8 @@ void calculate_rpm(int Z, int L, int M, int N)
 	{		
 		//calculate the square of each motor rpm
 		ae1[0]=(2*M-N+Z)/4+MIN_RPM;
-		ae1[1]=(2*L+N+Z)/4-L+MIN_RPM;
-		ae1[2]=(2*M-N+Z)/4-M+MIN_RPM;
+		ae1[1]=(2*L+N+Z)/4 -L +MIN_RPM;
+		ae1[2]=(2*M-N+Z)/4 -M +MIN_RPM;
 		ae1[3]=(2*L+N+Z)/4+MIN_RPM;
 
 		//minimum rpm
@@ -173,7 +176,6 @@ void calibration_mode()
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,1);
 	nrf_gpio_pin_write(GREEN,0);
-	nrf_delay_ms(10000);
 	//counter
 	int clb;
 	clb=0;
@@ -190,6 +192,11 @@ void calibration_mode()
 			r_off=r_off+sr;
 			phi_off=phi_off+phi;
 			theta_off=theta_off+theta;
+			printf("sp_off=%d, sq_off=%d, sr_off=%d,phi_off=%d,theta_off=%d\n",sp,sq,sr,phi,theta);
+		}
+		if(msg==true)
+		{
+			process_input();
 		}	
 	}
 
@@ -200,9 +207,9 @@ void calibration_mode()
 	phi_off=phi_off>>8;
 	theta_off=theta_off>>8;	
 
-	//fix a bug
+	//fix a bug, don't care to check connection getting to safe mode anyway
 	time_latest_packet_us=get_time_us();
-	//print offsets
+	//print offsets of calibrated values
 	printf("sp_off=%ld, sq_off=%ld, sr_off=%ld,phi_off=%ld,theta_off=%ld\n",p_off,q_off,r_off,phi_off,theta_off);
 	//get back to safe mode
 	statefunc=safe_mode;
@@ -243,15 +250,13 @@ void full_control_mode()
 		{
 			get_dmp_data();				
 			clear_sensor_int_flag();
-			calculate_rpm(lift_force, roll_moment + (roll_moment-(phi-phi_off)*26)*p1_ctrl-(sp-p_off)*26*p2_ctrl, pitch_moment + (pitch_moment-(theta-theta_off)*26)*p1_ctrl+(sq-q_off)*26*p2_ctrl,yaw_moment - (yaw_moment-(sr-r_off)*32)*p_ctrl);
-			//write_flight_data();			
+			calculate_rpm(lift_force, roll_moment + (roll_moment-(phi-phi_off)*4)*p1_ctrl-(sp-p_off)*4*p2_ctrl, pitch_moment + (pitch_moment-(theta-theta_off)*4)*p1_ctrl+(sq-q_off)*4*p2_ctrl,yaw_moment - (yaw_moment-(sr-r_off)*4)*p_ctrl);		
 		}
 	
 		if (check_timer_flag()) {			
 			if (counter++%20 == 0)
 			{		
 		 		nrf_gpio_pin_toggle(BLUE);
-
 				battery_check();
 				if(print_pc_enabled){
 					print_to_pc();
@@ -362,8 +367,7 @@ void yaw_control_mode()
 		{
 			get_dmp_data();				
 			clear_sensor_int_flag();
-			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*32)*p_ctrl);
-			//write_flight_data();			
+			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*16)*p_ctrl);		
 		}
 	
 		if (check_timer_flag()) {			
@@ -420,6 +424,7 @@ void manual_mode()
 	//indicate that you are in manual mode
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,0);
+	nrf_gpio_pin_write(GREEN,1);
 
 	//if there is a new command do the calculations
 	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
@@ -433,7 +438,6 @@ void manual_mode()
 		old_roll=cur_roll;
 		old_pitch=cur_pitch;
 		old_yaw=cur_yaw;
-	
 	}	
 
 	//while there is no message received wait here and check your connection	
@@ -444,7 +448,6 @@ void manual_mode()
 			if (counter++%20 == 0) 
 			{
 				nrf_gpio_pin_toggle(BLUE);
-
 				battery_check();
 				if(print_pc_enabled){
 					print_to_pc();
@@ -482,8 +485,18 @@ void panic_mode()
 	print_pc_enabled = true;
 
 	//indicate that you are in panic mode
-	nrf_gpio_pin_write(RED,0);
-	nrf_gpio_pin_write(YELLOW,0);
+	if(connection==false)
+	{
+		nrf_gpio_pin_write(RED,0);
+		nrf_gpio_pin_write(YELLOW,0);
+		nrf_gpio_pin_write(GREEN,0);
+	}
+	else
+	{
+		nrf_gpio_pin_write(RED,0);
+		nrf_gpio_pin_write(YELLOW,0);
+		nrf_gpio_pin_write(GREEN,1);
+	}
 
 	if (check_timer_flag()) {			
 		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
@@ -524,7 +537,6 @@ void panic_mode()
 	yaw_moment=0;
 	pitch_moment=0;
 
-
 	//fixes a bug, doesn't care to check connection going to safe mode anyway
 	time_latest_packet_us=get_time_us();
 
@@ -541,20 +553,19 @@ void safe_mode()
 	print_pc_enabled = true;
 
 	//indicate that you are in safe mode	
-	nrf_gpio_pin_write(RED,0);
-	nrf_gpio_pin_write(YELLOW,1);
-	nrf_gpio_pin_write(GREEN,1);
-
-	if (check_timer_flag()) {			
-		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
-
-		battery_check();
-		if(print_pc_enabled){
-			print_to_pc();
-		}
-		clear_timer_flag();
+		if(connection==false)
+	{
+		nrf_gpio_pin_write(RED,0);
+		nrf_gpio_pin_write(YELLOW,0);
+		nrf_gpio_pin_write(GREEN,0);
 	}
-
+	else
+	{
+		nrf_gpio_pin_write(RED,0);
+		nrf_gpio_pin_write(YELLOW,1);
+		nrf_gpio_pin_write(GREEN,1);
+	}
+	
 	//motors are shut down
 	ae[0]=0;
 	ae[1]=0;
@@ -568,6 +579,15 @@ void safe_mode()
 	while(msg==false && connection==true)
 	{
 		check_connection();
+		if (check_timer_flag()) {			
+		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+
+		battery_check();
+		if(print_pc_enabled){
+			print_to_pc();
+		}
+		clear_timer_flag();
+		}
 	}
 	
 	//if there is battery and the connection is ok read the messages
@@ -717,9 +737,9 @@ void initialize()
 	battery=true;
 	connection=true;
 	safe_print=true;
-	p_ctrl=12;
-	p1_ctrl=3;
-	p2_ctrl=5;
+	p_ctrl=40;
+	p1_ctrl=12;
+	p2_ctrl=30;
 	p_off=0;
 	q_off=0;
 	r_off=0;
@@ -765,9 +785,13 @@ void battery_check(){
 	
 	if (bat_volt < 1050)
 	{
-		printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
-		battery=false;
-		statefunc=panic_mode;
+		printf("LOW BATTERY WARNING!!!!\n");
+		if(bat_volt < 1000)
+		{
+			printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
+			battery=false;
+			statefunc=panic_mode;
+		}
 	}
 }
 
