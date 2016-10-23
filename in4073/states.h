@@ -1,17 +1,15 @@
 //declare functions
-int calculate_Z(char lift);
-int calculate_L(char roll);
-int calculate_M(char pitch);
-int calculate_N(char yaw);
 void calculate_rpm(int Z, int L, int M, int N);
-void calibration_mode();
-void manual_mode();
 void safe_mode();
 void panic_mode();
+void manual_mode();
 void calibration_mode();
 void yaw_control_mode();
+void full_control_mode();
 void check_connection();
+void battery_check();
 void process_input();
+char restore_num(char num);
 
 //state pointer
 void (*statefunc)();
@@ -61,3 +59,6 @@ bool msg;
 
 //flag to print in safe mode
 bool safe_print;
+
+bool decoupled_from_drone;
+uint32_t counter;

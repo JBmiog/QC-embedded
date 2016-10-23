@@ -17,103 +17,34 @@
 #include "states.h"
 #include "logging.c"
 
-#define MAXZ 1842400
-#define MAXL 325000
-#define MAXM 325000
-#define MAXN 700000
 #define BAT_THRESHOLD  1050
 
 #define MIN_RPM 204800
-#define MAX_RPM 665600
+#define MAX_RPM 768000
 
 #define int_to_fixed_point(a) (((int16_t)a)<<8)
 #define divide_fixed_points(a,b) (int)((((int32_t)a<<8)+(b/2))/b)
 #define fixed_point_to_int(a) (int)(a>>8)
 
-bool decoupled_from_drone = true;
-uint32_t counter = 0;
 
-//calculate the Z force requested makis
-int calculate_Z(char lift)
-{
-	int Z;
-	int8_t l;
-	l=lift;
-	Z=divide_fixed_points(int_to_fixed_point(l),int_to_fixed_point(63));	
-	Z=Z*MAXZ;
-	Z=fixed_point_to_int(Z);
-	return Z;
 
-	
-}
-//calculate the L moment requested makis
-int calculate_L(char roll)
+//restore the number received from pc side, due to protocol coding
+char restore_num(char num)
 {
-	int L;
-	int8_t r;
-	
-	if((roll&0x40)==0x40)
+	char n;
+	if((num&0x40)==0x40)
 	{
-		r=roll|0x80;
+		n=num|0x80;
 	}
 	else
-	{	
-		r=roll;	
-	}
-
-	L=divide_fixed_points(int_to_fixed_point(r),int_to_fixed_point(63));
-	L=L*MAXL;	
-	L=fixed_point_to_int(L);
-
-	return L;
-
-
-}
-
-//calculate the M moment requested makis
-int calculate_M(char pitch)
-{
-
-	int M;
-	int8_t p;
-
-	if((pitch&0x40)==0x40)
 	{
-		p=pitch|0x80;
-	}
-	else
-	{	
-		p=pitch;	
+		n=num;
 	}
 
-	M=divide_fixed_points(int_to_fixed_point(p),int_to_fixed_point(63));
-	M=M*MAXM;
-	M=fixed_point_to_int(M);
-
-	return M;
+	return n;
 }
-//calculate the N moment requested makis
-int calculate_N(char yaw)
-{
-	int N;
-	int8_t y;
-
-	if((yaw&0x40)==0x40)
-	{
-		y=yaw|0x80;
-	}
-	else
-	{	
-		y=yaw;	
-	}
 
 
-	N=divide_fixed_points(int_to_fixed_point(y),int_to_fixed_point(63));
-	N=N*MAXN;	
-	N=fixed_point_to_int(N);
-
-	return N;	
-}
 //in this function calculate the values for the ae[] array makis
 void calculate_rpm(int Z, int L, int M, int N)
 {
@@ -121,11 +52,11 @@ void calculate_rpm(int Z, int L, int M, int N)
 	//if there is lift force calculate ae[] array values
 	if(Z>0)
 	{		
-		//calculate the square of each motor rpm
-		ae1[0]=(2*M-N+Z)/4+MIN_RPM;
-		ae1[1]=(2*L+N+Z)/4-L+MIN_RPM;
-		ae1[2]=(2*M-N+Z)/4-M+MIN_RPM;
-		ae1[3]=(2*L+N+Z)/4+MIN_RPM;
+		//calculate the square of each motor rpm, according to the assignment.pdf equations
+		ae1[0]=(2*M-N+Z)/4 + MIN_RPM;
+		ae1[1]=(2*L+N+Z)/4 - L + MIN_RPM;
+		ae1[2]=(2*M-N+Z)/4 - M + MIN_RPM;
+		ae1[3]=(2*L+N+Z)/4 + MIN_RPM;
 
 		//minimum rpm
 		for(i=0;i<4;i++)
@@ -144,7 +75,7 @@ void calculate_rpm(int Z, int L, int M, int N)
 			}
 		}
 
-		//get the final motor values	
+		//get the final motor values, instead of square root calculation just scale down	
 		ae[0]=ae1[0]>>10;
 		ae[1]=ae1[1]>>10;
 		ae[2]=ae1[2]>>10;
@@ -167,15 +98,16 @@ void calibration_mode()
 {
 	cur_mode=CALIBRATION_MODE;
 	logging_enabled = true;
-	print_pc_enabled = true;
 
 	//indicate that you are in calibration mode
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,1);
 	nrf_gpio_pin_write(GREEN,0);
-	//counter
+
+	//counter for calibration samples
 	int clb;
 	clb=0;
+
 	//take 256 samples 
 	while(clb<256)
 	{
@@ -189,6 +121,7 @@ void calibration_mode()
 			r_off=r_off+sr;
 			phi_off=phi_off+phi;
 			theta_off=theta_off+theta;
+			printf("sp=%d, sq=%d, sr=%d,phi=%d,theta=%d\n",sp,sq,sr,phi,theta);
 		}
 		if(msg==true)
 		{
@@ -207,6 +140,11 @@ void calibration_mode()
 	time_latest_packet_us=get_time_us();
 	//print offsets of calibrated values
 	printf("sp_off=%ld, sq_off=%ld, sr_off=%ld,phi_off=%ld,theta_off=%ld\n",p_off,q_off,r_off,phi_off,theta_off);
+
+	
+	//print once in safe mode
+	safe_print=true;
+
 	//get back to safe mode
 	statefunc=safe_mode;
 }
@@ -217,28 +155,13 @@ void full_control_mode()
 	
 	cur_mode=FULL_CONTROL_MODE;
 	logging_enabled = true;
-	print_pc_enabled = true;
 
+	//indicate that you are in full control mode
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,0);
 	nrf_gpio_pin_write(GREEN,0);
 
-	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
-	{
-		lift_force=calculate_Z(cur_lift);
-		roll_moment=calculate_L(cur_roll);
-		pitch_moment=calculate_M(cur_pitch);
-		yaw_moment=calculate_N(cur_yaw);
-		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
-		old_lift=cur_lift;
-		old_roll=cur_roll;
-		old_pitch=cur_pitch;
-		old_yaw=cur_yaw;
-		run_filters_and_control();
-		print_to_pc();
-	}	
-	
-
+	//while no new message has been received, enter this control loop
 	while(msg==false && connection==true)
 	{
 		check_connection();
@@ -246,24 +169,25 @@ void full_control_mode()
 		{
 			get_dmp_data();				
 			clear_sensor_int_flag();
-			calculate_rpm(lift_force, roll_moment + (roll_moment-(phi-phi_off)*16)*p1_ctrl-(sp-p_off)*16*p2_ctrl, pitch_moment + (pitch_moment-(theta-theta_off)*16)*p1_ctrl+(sq-q_off)*16*p2_ctrl,yaw_moment - (yaw_moment-(sr-r_off)*16)*p_ctrl);		
+			calculate_rpm(lift_force, roll_moment + (roll_moment-(phi-phi_off)*4)*p1_ctrl-(sp-p_off)*4*p2_ctrl, pitch_moment + (pitch_moment-(theta-theta_off)*4)*p1_ctrl+(sq-q_off)*4*p2_ctrl,yaw_moment - (yaw_moment-(sr-r_off)*4)*p_ctrl);		
 		}
 	
-		if (check_timer_flag()) {			
+		if (check_timer_flag())
+		{			
 			if (counter++%20 == 0)
 			{		
 		 		nrf_gpio_pin_toggle(BLUE);
-
 				battery_check();
-				if(print_pc_enabled){
-					print_to_pc();
-				}
+				printf("Full Controlled Mode, Battery: %d, p:%d, p1:%d, p2:%d, ae[0]: %d, ae[1]: %d, ae[2]: %d, ae[3]: %d\n",bat_volt,p_ctrl,p1_ctrl,p2_ctrl,ae[0],ae[1],ae[2],ae[3]);
 			}
 			clear_timer_flag();
 		}
 	}
-	
+
+	//read the new message
 	process_input();
+
+	//act according to the received message
 	switch (pc_packet.mode)	
 	{			
 		case PANIC_MODE:
@@ -324,8 +248,61 @@ void full_control_mode()
 			}
 			break;
 		default:
+			printf("Invalid mode transition!!!\n");
 			break;
 	}
+
+
+	//if there is a new command do the calculations
+	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
+	{
+
+		//map pc-side info to forces and moments
+		lift_force=cur_lift*9676;
+
+		if(cur_roll>63)
+		{
+			roll_moment=(int)(((cur_roll-128)>>3)*1270);
+		}
+		else
+		{
+			roll_moment=(int)((cur_roll>>3)*1270);
+		}
+		
+		if(cur_pitch>63)
+		{
+			pitch_moment=(int)(((cur_pitch-128)>>3)*1270);
+		}
+		else
+		{
+			pitch_moment=(int)((cur_pitch>>3)*1270);
+		}
+		
+		if(cur_yaw>63)
+		{
+			yaw_moment=(int)(((cur_yaw-128)>>3)*1270);
+		}
+		else
+		{
+			yaw_moment=(int)((cur_yaw>>3)*1270);
+		}
+		
+		//calculate the motor values
+		//calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
+
+		//make sure to enter again when something new happens
+		old_lift=cur_lift;
+		old_roll=cur_roll;
+		old_pitch=cur_pitch;
+		old_yaw=cur_yaw;		
+
+		
+		//print statement
+		printf("Full Controlled Mode, Battery: %d, p:%d, p1:%d, p2:%d, ae[0]: %d, ae[1]: %d, ae[2]: %d, ae[3]: %d\n",bat_volt,p_ctrl,p1_ctrl,p2_ctrl,ae[0],ae[1],ae[2],ae[3]);
+	}	
+
+		
+	
 }
 
 
@@ -335,27 +312,12 @@ void yaw_control_mode()
 	
 	cur_mode=YAW_CONTROLLED_MODE;
 	logging_enabled = true;
-	print_pc_enabled = true;
-
+	
+	//indicate that you are in yaw control mode
 	nrf_gpio_pin_write(RED,0);
 	nrf_gpio_pin_write(YELLOW,1);
 	nrf_gpio_pin_write(GREEN,0);
 
-	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
-	{
-		lift_force=calculate_Z(cur_lift);
-		roll_moment=calculate_L(cur_roll);
-		pitch_moment=calculate_M(cur_pitch);
-		yaw_moment=calculate_N(cur_yaw);
-		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
-		old_lift=cur_lift;
-		old_roll=cur_roll;
-		old_pitch=cur_pitch;
-		old_yaw=cur_yaw;
-		run_filters_and_control();
-		print_to_pc();
-	}	
-	
 
 	while(msg==false && connection==true)
 	{
@@ -364,24 +326,27 @@ void yaw_control_mode()
 		{
 			get_dmp_data();				
 			clear_sensor_int_flag();
-			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*16)*p_ctrl);		
+			calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment - (yaw_moment-sr*4)*p_ctrl);		
 		}
 	
-		if (check_timer_flag()) {			
+		if (check_timer_flag()) 
+		{			
 			if (counter++%20 == 0)
 			{
 				 nrf_gpio_pin_toggle(BLUE);
 
 				battery_check();
-				if(print_pc_enabled){
-					print_to_pc();
-				}
+
+				printf("Yaw Controlled Mode, Battery: %d, p:%d, ae[0]: %d, ae[1]: %d, ae[2]: %d, ae[3]: %d\n",bat_volt,p_ctrl,ae[0],ae[1],ae[2],ae[3]);
 			}
 			clear_timer_flag();
 		}
 	}
-	
+
+	//read the message
 	process_input();
+	
+	//act according to the message just read
 	switch (pc_packet.mode)	
 	{
 		case PANIC_MODE:
@@ -395,19 +360,71 @@ void yaw_control_mode()
 			if(pc_packet.p_adjust==1)
 			{
 				p_ctrl=p_ctrl+1;
+				if(p_ctrl>=127)
+				{
+					p_ctrl=127;
+				}
 			}
 			if(pc_packet.p_adjust==2)
 			{
 				p_ctrl=p_ctrl-1;
-				if(p_ctrl<=1)
+				if(p_ctrl<=0)
 				{
-					p_ctrl=1;
+					p_ctrl=0;
 				}
 			}
 			break;
 		default:
+			printf("Invalid mode transition!!!\n");
 			break;
 	}
+
+
+	//if there is a new command do the calculations
+	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
+	{
+
+		//map pc-side info to forces and moments
+		lift_force=cur_lift*9676;
+
+		if(cur_roll>63)
+		{
+			roll_moment=(int)(((cur_roll-128)>>3)*1270);
+		}
+		else
+		{
+			roll_moment=(int)((cur_roll>>3)*1270);
+		}
+		
+		if(cur_pitch>63)
+		{
+			pitch_moment=(int)(((cur_pitch-128)>>3)*1270);
+		}
+		else
+		{
+			pitch_moment=(int)((cur_pitch>>3)*1270);
+		}
+		
+		if(cur_yaw>63)
+		{
+			yaw_moment=(int)(((cur_yaw-128)>>3)*1270);
+		}
+		else
+		{
+			yaw_moment=(int)((cur_yaw>>3)*1270);
+		}
+		
+		//calculate the motor values
+		//calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
+
+		//make sure to enter again when something new happens
+		old_lift=cur_lift;
+		old_roll=cur_roll;
+		old_pitch=cur_pitch;
+		old_yaw=cur_yaw;		
+		//print statement
+		printf("Yaw Controlled Mode, Battery: %d, p:%d, ae[0]: %d, ae[1]: %d, ae[2]: %d, ae[3]: %d\n",bat_volt,p_ctrl,ae[0],ae[1],ae[2],ae[3]);
+	}	
 }
 
 
@@ -416,28 +433,14 @@ void manual_mode()
 {
 	cur_mode=MANUAL_MODE;
 	logging_enabled = true;
-	print_pc_enabled = true;
 
 	//indicate that you are in manual mode
 	nrf_gpio_pin_write(RED,1);
 	nrf_gpio_pin_write(YELLOW,0);
 	nrf_gpio_pin_write(GREEN,1);
 
-	//if there is a new command do the calculations
-	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
-	{
-		lift_force=calculate_Z(cur_lift);
-		roll_moment=calculate_L(cur_roll);
-		pitch_moment=calculate_M(cur_pitch);
-		yaw_moment=calculate_N(cur_yaw);
-		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
-		old_lift=cur_lift;
-		old_roll=cur_roll;
-		old_pitch=cur_pitch;
-		old_yaw=cur_yaw;
-	}	
 
-	//while there is no message received wait here and check your connection	
+	//while there is no message received wait here, check your connection, check your battery and toggle the blue led	
 	while(msg==false && connection==true)
 	{
 		check_connection();
@@ -446,9 +449,6 @@ void manual_mode()
 			{
 				nrf_gpio_pin_toggle(BLUE);
 				battery_check();
-				if(print_pc_enabled){
-					print_to_pc();
-				}
 			}
 			clear_timer_flag();
 		}
@@ -456,8 +456,12 @@ void manual_mode()
 
 	//read the new messages to come
 	process_input();
+
+	//act according to the incoming message
 	switch (pc_packet.mode)	
 	{
+		case SAFE_MODE:
+			statefunc=safe_mode;
 		case PANIC_MODE:
 			statefunc=panic_mode;
 			break;
@@ -467,11 +471,61 @@ void manual_mode()
 			cur_roll=pc_packet.roll;
 			cur_yaw=pc_packet.yaw;
 			break;
-		case SAFE_MODE:
-			statefunc=safe_mode;
 		default:
+			printf("Invalid mode transition!!!\n");
 			break;
 	}
+
+	//if there is a new command do the calculations
+	if(old_lift!=cur_lift || old_pitch!=cur_pitch || old_roll!=cur_roll || old_yaw!=cur_yaw)	
+	{
+
+		//map pc-side info to forces and moments
+		lift_force=cur_lift*9676;
+
+		if(cur_roll>63)
+		{
+			roll_moment=(int)((cur_roll-128)*1270);
+		}
+		else
+		{
+			roll_moment=(int)(cur_roll*1270);
+		}
+		
+		if(cur_pitch>63)
+		{
+			pitch_moment=(int)((cur_pitch-128)*1270);
+		}
+		else
+		{
+			pitch_moment=(int)(cur_pitch*1270);
+		}
+		
+		if(cur_yaw>63)
+		{
+			yaw_moment=(int)((cur_yaw-128)*12700);
+		}
+		else
+		{
+			yaw_moment=(int)(cur_yaw*12700);
+		}
+		
+		//calculate the motor values
+		calculate_rpm(lift_force,roll_moment,pitch_moment,yaw_moment);
+
+		//make sure to enter again when something new happens
+		old_lift=cur_lift;
+		old_roll=cur_roll;
+		old_pitch=cur_pitch;
+		old_yaw=cur_yaw;
+		
+		//print statement
+		printf("Manual Mode, Battery: %d, ae[0]: %d, ae[1]: %d, ae[2]: %d, ae[3]: %d\n",bat_volt,ae[0],ae[1],ae[2],ae[3]);
+	}	
+
+
+
+	
 }
 
 //panic mode state makis
@@ -486,8 +540,14 @@ void panic_mode()
 	nrf_gpio_pin_write(YELLOW,0);
 	nrf_gpio_pin_write(GREEN,1);
 
-	if (check_timer_flag()) {			
-		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
+
+	//toggle blue led
+	if (check_timer_flag())
+	{			
+		if (counter++%20 == 0)
+		{
+			nrf_gpio_pin_toggle(BLUE);
+		}
 	}
 	
 
@@ -500,14 +560,13 @@ void panic_mode()
 		run_filters_and_control();
 		//delay for next round
 		nrf_delay_ms(200);
-		if(print_pc_enabled){
-			print_to_pc();
-		}
+		printf("Panic Mode, ae[0]=%d, ae[1]=%d, ae[2]=%d, ae[3]=%d\n",ae[0],ae[1],ae[2],ae[3]);
 		clear_timer_flag();
 	}
 
 	//enters safe mode
-	if(ae[0]<=175 || ae[1]<=175 || ae[2]<=175 || ae[3]<=175){
+	if(ae[0]<=175 || ae[1]<=175 || ae[2]<=175 || ae[3]<=175)
+	{
 		statefunc=safe_mode;
 	}
 
@@ -528,7 +587,7 @@ void panic_mode()
 	//fixes a bug, doesn't care to check connection going to safe mode anyway
 	time_latest_packet_us=get_time_us();
 
-	//flag to print once in safe mode
+	//flag to print only once in safe mode
 	safe_print=true;
 
 }
@@ -538,23 +597,21 @@ void safe_mode()
 {
 	cur_mode=SAFE_MODE;	
 	logging_enabled = false;
-	print_pc_enabled = true;
 
 	//indicate that you are in safe mode	
-	nrf_gpio_pin_write(RED,0);
-	nrf_gpio_pin_write(YELLOW,1);
-	nrf_gpio_pin_write(GREEN,1);
-
-	if (check_timer_flag()) {			
-		if (counter++%20 == 0) nrf_gpio_pin_toggle(BLUE);
-
-		battery_check();
-		if(print_pc_enabled){
-			print_to_pc();
-		}
-		clear_timer_flag();
+	if(connection==false)
+	{
+		nrf_gpio_pin_write(RED,0);
+		nrf_gpio_pin_write(YELLOW,0);
+		nrf_gpio_pin_write(GREEN,0);
 	}
-
+	else
+	{
+		nrf_gpio_pin_write(RED,0);
+		nrf_gpio_pin_write(YELLOW,1);
+		nrf_gpio_pin_write(GREEN,1);
+	}
+	
 	//motors are shut down
 	ae[0]=0;
 	ae[1]=0;
@@ -563,11 +620,28 @@ void safe_mode()
 	run_filters_and_control();
 
 
-
-	//while no message is received wait here and check your connection
+	//while no message is received wait here, check your connection, check your battery, toggle the blue led
 	while(msg==false && connection==true)
 	{
 		check_connection();
+		if (check_timer_flag())
+		{			
+			if (counter++%20 == 0)
+			{
+				nrf_gpio_pin_toggle(BLUE);
+			}
+
+			battery_check();
+
+			//print only once in safe mode
+			if(safe_print)
+			{
+				printf("Safe Mode, Battery: %d\n",bat_volt);
+				safe_print=false;		
+			}
+
+			clear_timer_flag();
+		}
 	}
 	
 	//if there is battery and the connection is ok read the messages
@@ -576,12 +650,14 @@ void safe_mode()
 		process_input();
 		switch (pc_packet.mode)
 		{
-			//check for not switching to manual mode with offsets different than zero
 			case MANUAL_MODE:
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
+					printf("Manual Mode, Battery: %d, ae[0]: %d, ae[1]: %d, ae[2]: %d, ae[3]: %d\n",bat_volt,ae[0],ae[1],ae[2],ae[3]);
 					statefunc=manual_mode;
-				} else {
+				} 
+				else
+				{
 					printf("offsets do not match 0!\n");
 					nrf_delay_ms(10);
 				}
@@ -595,6 +671,7 @@ void safe_mode()
 			case YAW_CONTROLLED_MODE:
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
+					printf("Yaw Controlled Mode, Battery: %d, p:%d, ae[0]: %d, ae[1]: %d, ae[2]: %d, ae[3]: %d\n",bat_volt,p_ctrl,ae[0],ae[1],ae[2],ae[3]);
 					statefunc=yaw_control_mode;
 				} else {
 					printf("offsets do not match 0!\n");
@@ -604,6 +681,7 @@ void safe_mode()
 			case FULL_CONTROL_MODE:
 				if(pc_packet.lift==0 && pc_packet.pitch==0 && pc_packet.roll==0 && pc_packet.yaw==0)
 				{
+					printf("Full Controlled Mode, Battery: %d, p:%d, p1:%d, p2:%d, ae[0]: %d, ae[1]: %d, ae[2]: %d, ae[3]: %d\n",bat_volt,p_ctrl,p1_ctrl,p2_ctrl,ae[0],ae[1],ae[2],ae[3]);
 					statefunc=full_control_mode;
 				} else {
 					printf("offsets do not match 0!\n");
@@ -660,7 +738,6 @@ void process_input()
 			pc_packet.checksum = tp.checksum;
 			time_latest_packet_us = get_time_us();
 			msg=false;
-
 		}
 
 		/*flush rest of queue*/
@@ -717,9 +794,9 @@ void initialize()
 	battery=true;
 	connection=true;
 	safe_print=true;
-	p_ctrl=12;
-	p1_ctrl=3;
-	p2_ctrl=5;
+	p_ctrl=40;
+	p1_ctrl=12;
+	p2_ctrl=30;
 	p_off=0;
 	q_off=0;
 	r_off=0;
@@ -728,9 +805,11 @@ void initialize()
 
 	statefunc= safe_mode;
 
+	decoupled_from_drone = true;
+	counter = 0;
+
 	erase_flight_data(); 
 	logging_enabled = false;
-	print_pc_enabled = true;
 }
 
 //if nothing received for over 500ms approximately go to panic mode and exit
@@ -745,15 +824,6 @@ void check_connection()
 	}
 }
 
-//jmi
-void print_to_pc(){
-	//printf("%10ld | ", get_time_us());
-	printf("%d | ",cur_mode);
-	printf("%3d %3d %3d %3d | ",ae[0],ae[1],ae[2],ae[3]);
-	printf("%6d %6d %6d | ", p_ctrl, p1_ctrl, p2_ctrl);
-	//printf("%6d %6d %6d | ", sp, sq, sr);
-	printf("%4d | %4ld | %6ld \n", bat_volt, temperature, pressure);
-}
 
 //jmi
 void battery_check(){
@@ -762,12 +832,16 @@ void battery_check(){
 		return; 
 	}
 	adc_request_sample();
-	
+	//printf("Battery:%d\n",bat_volt);
 	if (bat_volt < 1050)
 	{
-		printf("bat voltage %d below threshold %d",bat_volt,BAT_THRESHOLD);
-		battery=false;
-		statefunc=panic_mode;
+		printf("LOW BATTERY WARNING!!!!\n");
+		if(bat_volt < 1000)
+		{
+			printf("bat voltage %d below threshold %d\n",bat_volt,BAT_THRESHOLD);
+			battery=false;
+			statefunc=panic_mode;
+		}
 	}
 }
 
