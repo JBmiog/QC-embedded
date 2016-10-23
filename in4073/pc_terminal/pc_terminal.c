@@ -87,7 +87,7 @@ void set_js_packet(char direction, int axis, int divisor)
 /*Align lift --Hongjia Wu*/
 void set_lift_packet(char direction, unsigned int axis, int divisor)
 {
-    float throttle_on_scale = 0, multiplierlow = 75, multiplierhigh = 52;
+    float throttle_on_scale = 0, multiplierlow = 100, multiplierhigh = 27;
     char send_value;
 
     throttle_on_scale = (axis + (divisor / 2)) / divisor;
@@ -99,7 +99,7 @@ void set_lift_packet(char direction, unsigned int axis, int divisor)
         send_value = throttle_on_scale/1000.0*multiplierlow;
 
    if(throttle_on_scale > 1000)
-        send_value = 75 + (throttle_on_scale - 1000.0)/1000.0*multiplierhigh;
+        send_value = 100 + (throttle_on_scale - 1000.0)/1000.0*multiplierhigh;
 
     push_packet(direction, send_value);
 
@@ -422,13 +422,13 @@ void kb_input_handler(char pressed_key)
 		mode = SHUTDOWN_MODE;
 		break;
     case 'a':
-        if(lift_offset!=63)
+        if(lift_offset!=127)
         {
             lift_offset+=UP;
         }
         break;
     case 'z':
-        if(lift_offset!=-63)
+        if(lift_offset!=-127)
         {
             lift_offset+=DOWN;
         }
@@ -550,9 +550,9 @@ char inspect_overflow_1(char offset, char js, char kb)
 
     char temp_sum;
 
-    if ((offset + js + kb) > 63)
+    if ((offset + js + kb) >= 127)
     {
-        temp_sum = 63 & 0x7F;;
+        temp_sum = 127 & 0x7F;;
     }
     else if ((offset + js + kb) < 0)
     {
@@ -651,7 +651,7 @@ int main(int argc, char **argv)
 
 	//xbox_js_init();
     
-	joystick_init();
+	//joystick_init();
     
 	unsigned int old_time, current_time;
 	old_time = mon_time_ms();
@@ -665,7 +665,7 @@ int main(int argc, char **argv)
              term_putchar(c);
         }
 
-		read_js(fd);
+		//read_js(fd);
  
 		while ((c = term_getchar_nb()) != -1)
         {
